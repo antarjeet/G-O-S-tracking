@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI-GOS | Next Generation AI Operating System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- React & Babel CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  
+  <!-- Chart.js CDN for Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Socket.io client CDN — talks to the real backend/server.js engine -->
+  <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"></script>
+
+  <style>
+    :root {
+      --bg-dark: #070812;
+      --bg-card: #0d0f1f;
+      --bg-card-hover: #13162b;
+      --border-color: rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(0, 242, 254, 0.3);
+      --primary: #00f2fe;
+      --primary-purple: #7f00ff;
+      --accent-pink: #ff007f;
+      --accent-green: #00ffaa;
+      --accent-amber: #ffaa00;
+      --text-main: #f0f4ff;
+      --text-muted: #8b92b3;
+      --font-sans: 'Outfit', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+      --gradient-main: linear-gradient(135deg, #00f2fe 0%, #7f00ff 100%);
+      --gradient-card: linear-gradient(180deg, rgba(19, 22, 43, 0.85) 0%, rgba(13, 15, 31, 0.95) 100%);
+      --shadow-glow: 0 0 25px rgba(0, 242, 254, 0.25);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient Background Glows */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -15%; left: 20%;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(0, 242, 254, 0.09) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+    body::after {
+      content: '';
+      position: fixed;
+      bottom: -15%; right: 10%;
+      width: 700px; height: 700px;
+      background: radial-gradient(circle, rgba(127, 0, 255, 0.09) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+
+    .app-container {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Top Navigation Bar */
+    .top-navbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.9rem 2rem;
+      background: rgba(13, 15, 31, 0.85);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border-color);
+      position: sticky; top: 0; z-index: 100;
+    }
+
+    .logo-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 800;
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .logo-badge {
+      background: var(--gradient-main);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .nav-pills {
+      display: flex;
+      gap: 0.35rem;
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.3rem;
+      border-radius: 12px;
+      border: 1px solid var(--border-color);
+    }
+
+    .nav-tab {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 1.1rem;
+      border-radius: 8px;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 0.85rem;
+      border: none;
+      cursor: pointer;
+      transition: all 0.25s ease;
+    }
+
+    .nav-tab:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
+
+    .nav-tab.active {
+      background: var(--gradient-main);
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 4px 15px rgba(0, 242, 254, 0.3);
+    }
+
+    /* Glass Cards */
+    .glass-card {
+      background: var(--gradient-card);
+      backdrop-filter: blur(14px);
+      border: 1px solid var(--border-color);
+      border-radius: 16px;
+      padding: 1.4rem;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .glass-card:hover {
+      border-color: rgba(0, 242, 254, 0.25);
+      box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+    }
+
+    .glass-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.2rem;
+    }
+
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    /* Buttons */
+    .btn-primary {
+      background: var(--gradient-main);
+      color: #fff;
+      font-weight: 600;
+      border: none;
+      padding: 0.7rem 1.5rem;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 20px rgba(0, 242, 254, 0.3);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(0, 242, 254, 0.45);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--text-main);
+      font-weight: 500;
+      border: 1px solid var(--border-color);
+      padding: 0.7rem 1.5rem;
+      border-radius: 10px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      transition: all 0.25s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .badge-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      font-family: var(--font-mono);
+    }
+
+    .badge-live {
+      background: rgba(0, 255, 170, 0.15);
+      color: var(--accent-green);
+      border: 1px solid rgba(0, 255, 170, 0.3);
+    }
+
+    .badge-pulse-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      box-shadow: 0 0 8px currentColor;
+      animation: pulse-dot 1.5s infinite;
+    }
+
+    @keyframes pulse-dot {
+      0% { transform: scale(0.9); opacity: 0.7; }
+      50% { transform: scale(1.3); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.7; }
+    }
+
+    /* Range Sliders & Toggles */
+    .custom-range {
+      -webkit-appearance: none;
+      width: 100%; height: 6px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.1);
+      outline: none;
+    }
+    .custom-range::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px; height: 16px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 10px var(--primary);
+      cursor: pointer;
+    }
+
+    .toggle-switch {
+      position: relative; display: inline-block;
+      width: 44px; height: 24px;
+    }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+      position: absolute; cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(255, 255, 255, 0.1);
+      transition: 0.3s; border-radius: 24px;
+      border: 1px solid var(--border-color);
+    }
+    .toggle-slider:before {
+      position: absolute; content: "";
+      height: 16px; width: 16px; left: 3px; bottom: 3px;
+      background-color: white; transition: 0.3s;
+      border-radius: 50%;
+    }
+    input:checked + .toggle-slider { background: var(--gradient-main); border-color: var(--primary); }
+    input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+    /* Floating AI Orb */
+    .ai-orb-button {
+      position: fixed; bottom: 2rem; left: 2rem;
+      width: 56px; height: 56px; border-radius: 50%;
+      background: var(--gradient-main);
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      color: white; display: flex; align-items: center; justify-content: center;
+      cursor: pointer; box-shadow: var(--shadow-glow); z-index: 999;
+      transition: all 0.3s ease;
+    }
+    .ai-orb-button:hover { transform: scale(1.1); box-shadow: 0 0 35px rgba(0, 242, 254, 0.6); }
+
+    .ai-drawer {
+      position: fixed; bottom: 6rem; left: 2rem;
+      width: 350px; background: rgba(13, 15, 31, 0.95);
+      backdrop-filter: blur(20px); border: 1px solid var(--border-glow);
+      border-radius: 20px; padding: 1.2rem;
+      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6); z-index: 998;
+    }
+
+    /* Waveform Animation */
+    .waveform-container { display: flex; align-items: center; justify-content: center; gap: 4px; height: 44px; }
+    .wave-bar {
+      width: 4px; background: var(--gradient-main); border-radius: 4px;
+      animation: wave-anim 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes wave-anim {
+      0% { height: 15%; opacity: 0.4; }
+      100% { height: 100%; opacity: 1; filter: drop-shadow(0 0 6px var(--primary)); }
+    }
+
+    /* Pipeline Architecture Flow */
+    .pipeline-flow { display: flex; align-items: center; justify-content: space-between; gap: 1rem; overflow-x: auto; padding: 0.5rem 0; }
+    .pipeline-node {
+      display: flex; flex-direction: column; align-items: center; gap: 0.4rem;
+      background: rgba(255, 255, 255, 0.03); border: 1px solid var(--border-color);
+      border-radius: 12px; padding: 0.9rem; min-width: 110px; text-align: center;
+    }
+    .pipeline-node.active { border-color: var(--primary); background: rgba(0, 242, 254, 0.08); }
+
+    /* Auth Gate */
+    .auth-wrap {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      position: relative; z-index: 1;
+    }
+    .auth-card {
+      width: 100%; max-width: 380px; padding: 2rem;
+    }
+    .auth-tabs { display: flex; gap: 0.4rem; margin-bottom: 1.4rem; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.3rem; }
+    .auth-tabs button { flex: 1; padding: 0.55rem; border: none; border-radius: 8px; background: transparent; color: var(--text-muted); font-weight: 600; cursor: pointer; }
+    .auth-tabs button.active { background: var(--gradient-main); color: #fff; }
+    .auth-form { display: flex; flex-direction: column; gap: 0.9rem; }
+    .auth-form label { display: flex; flex-direction: column; gap: 0.35rem; font-size: 0.8rem; color: var(--text-muted); }
+    .auth-form input {
+      background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); border-radius: 8px;
+      padding: 0.65rem 0.8rem; color: var(--text-main); font-size: 0.95rem; font-family: var(--font-sans);
+    }
+    .auth-form input:focus { outline: none; border-color: var(--primary); }
+    .auth-error { color: var(--accent-pink); font-size: 0.8rem; margin: 0; }
+    .auth-hint { margin-top: 1rem; font-size: 0.78rem; color: var(--text-muted); text-align: center; }
+
+    /* Admin / status table */
+    .admin-users-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    .admin-users-table th, .admin-users-table td { text-align: left; padding: 0.55rem 0.6rem; border-bottom: 1px solid var(--border-color); }
+    .admin-users-table button { background: rgba(255,255,255,0.06); color: var(--text-main); border: 1px solid var(--border-color); border-radius: 6px; padding: 0.3rem 0.6rem; margin-right: 0.4rem; cursor: pointer; font-size: 0.78rem; }
+    .admin-delete-btn { color: var(--accent-pink) !important; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 0.4rem; }
+
+    /* Solid backing for controls placed on top of a live camera feed —
+       the feed itself can be any color (including bright white), which
+       would wash out a semi-transparent chip and its light text otherwise.
+       Only sets background/border, so it layers under whatever text color
+       badge-live / btn-secondary already give the content. */
+    .overlay-chip {
+      background: rgba(4, 6, 14, 0.78);
+      backdrop-filter: blur(6px);
+      border-color: rgba(255, 255, 255, 0.18);
+    }
+    .overlay-chip:hover {
+      background: rgba(4, 6, 14, 0.92);
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useCallback } = React;
+
+    // Backend is served from the same origin as this page (see
+    // backend/server.js, which now serves the gos/ folder directly), so
+    // relative fetch()/socket URLs just work — no cross-origin CORS/cookie
+    // dance needed the way the old ai-gos-hud (Vite dev server on a
+    // different port) required.
+    const AUTH_OPTS = { credentials: 'include' };
+    const socket = io({ autoConnect: false, reconnection: true, withCredentials: true });
+
+    // Browser-side speech recognition (Chrome/Edge). Calling .start() on
+    // this is what makes the browser show its native "use your microphone"
+    // permission prompt — the Python engine's own PC-mic listening (see
+    // voice_typing.py) never prompts anything because it isn't the browser
+    // accessing the mic. Using this instead means voice typing works from
+    // whichever device has the dashboard open (phone, laptop) rather than
+    // only the PC actually running the engine.
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    // Mirrors the command set ultimate_gesture_control.py listens for on
+    // stdin (see _stdin_command_reader / the K/H/G/M/P/T/V/C handlers).
+    const ENGINE_COMMANDS = [
+      { cmd: 'TOGGLE_KEYBOARD', label: '⌨️ Keyboard', title: 'Toggle AI-GOS keyboard (K)' },
+      { cmd: 'SWAP_HAND', label: '🤚 Swap Hand', title: 'Swap primary hand (H)' },
+      { cmd: 'TOGGLE_AI_GOS', label: '🧠 AI-GOS Layer', title: 'Toggle AI-GOS layer (G)' },
+      { cmd: 'CYCLE_CONTEXT', label: '🗂️ Context', title: 'Cycle context: General/Browser/Coding/Media (M)' },
+      { cmd: 'CYCLE_PROFILE', label: '🎚️ Profile', title: 'Cycle profile: Default/Accessible (P)' },
+      { cmd: 'TRAIN', label: '🎓 Train', title: 'Train current pose as custom gesture (T)' },
+      { cmd: 'TOGGLE_VOICE', label: '🎙️ Voice', title: 'Toggle voice input (V)' },
+      { cmd: 'CLEAR', label: '🧹 Clear', title: 'Clear AI-GOS keyboard text (C)' }
+    ];
+
+    // --- Auth Gate (login / signup against backend/auth.js) ---
+    const AuthGate = ({ onAuthenticated, onClose }) => {
+      const [mode, setMode] = useState('login');
+      const [username, setUsername] = useState('');
+      const [email, setEmail] = useState('');
+      const [password, setPassword] = useState('');
+      const [error, setError] = useState('');
+      const [busy, setBusy] = useState(false);
+
+      const submit = async (e) => {
+        e.preventDefault();
+        setError('');
+        setBusy(true);
+        const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/signup';
+        const body = mode === 'login' ? { username, password } : { username, email, password };
+        try {
+          const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            ...AUTH_OPTS,
+            body: JSON.stringify(body)
+          });
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error(data.message || 'Something went wrong');
+          onAuthenticated(data.user);
+        } catch (err) {
+          setError(err.message === 'Failed to fetch' ? 'Could not reach the AI-GOS backend. Is it running?' : err.message);
+        } finally {
+          setBusy(false);
+        }
+      };
+
+      const content = (
+          <div className="glass-card auth-card" style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
+            {onClose && (
+              <button onClick={onClose} style={{ position: 'absolute', top: '0.8rem', right: '0.8rem', background: 'none', border: 'none', color: 'var(--text-muted)', fontSize: '1.2rem', cursor: 'pointer' }}>✕</button>
+            )}
+            <div style={{ textAlign: 'center', marginBottom: '1.4rem' }}>
+              <span className="logo-badge" style={{ fontSize: '1.6rem', fontWeight: 800 }}>AI-GOS</span>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', letterSpacing: '0.05em', marginTop: '0.2rem' }}>GESTURE OPERATING SYSTEM</div>
+            </div>
+
+            <div className="auth-tabs">
+              <button className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setError(''); }}>LOG IN</button>
+              <button className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setError(''); }}>SIGN UP</button>
+            </div>
+
+            <form className="auth-form" onSubmit={submit}>
+              <label>
+                Username
+                <input value={username} onChange={(e) => setUsername(e.target.value)} required minLength={3} maxLength={24} autoComplete="username" />
+              </label>
+              {mode === 'signup' && (
+                <label>
+                  Email
+                  <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+                </label>
+              )}
+              <label>
+                Password
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                />
+              </label>
+
+              {error && <p className="auth-error">{error}</p>}
+
+              <button type="submit" className="btn-primary" disabled={busy} style={{ justifyContent: 'center' }}>
+                {busy ? 'Please wait…' : mode === 'login' ? 'Log In' : 'Create Account'}
+              </button>
+            </form>
+
+            <p className="auth-hint">
+              {mode === 'login' ? "Don't have an account? Switch to Sign Up above." : 'Passwords need at least 8 characters.'}
+            </p>
+          </div>
+      );
+
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }} onClick={onClose}>
+          {content}
+        </div>
+      );
+    };
+
+    // --- Admin Panel (user management, admin accounts only) ---
+    const AdminPanel = ({ currentUser, onClose }) => {
+      const [users, setUsers] = useState(null);
+      const [error, setError] = useState('');
+      const [busyId, setBusyId] = useState(null);
+
+      const load = useCallback(async () => {
+        setError('');
+        try {
+          const res = await fetch('/api/auth/admin/users', AUTH_OPTS);
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error(data.message || 'Failed to load users');
+          setUsers(data.users);
+        } catch (err) {
+          setError(err.message);
+        }
+      }, []);
+
+      useEffect(() => { load(); }, [load]);
+
+      const runAction = async (userId, action) => {
+        setBusyId(userId);
+        setError('');
+        try {
+          const method = action === 'delete' ? 'DELETE' : 'POST';
+          const res = await fetch(`/api/auth/admin/users/${userId}${action === 'delete' ? '' : `/${action}`}`, { method, ...AUTH_OPTS });
+          const data = await res.json();
+          if (!res.ok || !data.success) throw new Error(data.message || 'Action failed');
+          await load();
+        } catch (err) {
+          setError(err.message);
+        } finally {
+          setBusyId(null);
+        }
+      };
+
+      return (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={onClose}>
+          <div className="glass-card" style={{ width: '520px', maxWidth: '90vw', padding: '1.6rem' }} onClick={(e) => e.stopPropagation()}>
+            <div className="glass-card-header">
+              <div className="card-title">👥 USER MANAGEMENT</div>
+              <button onClick={onClose} className="btn-secondary" style={{ padding: '0.3rem 0.7rem' }}>Close</button>
+            </div>
+            {error && <p className="auth-error">{error}</p>}
+            {!users && !error && <p style={{ color: 'var(--text-muted)' }}>Loading users…</p>}
+            {users && (
+              <table className="admin-users-table">
+                <thead><tr><th>User</th><th>Role</th><th></th></tr></thead>
+                <tbody>
+                  {users.map((u) => (
+                    <tr key={u.id}>
+                      <td>
+                        <div>{u.username}{u.id === currentUser.id ? ' (you)' : ''}</div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{u.email}</div>
+                      </td>
+                      <td>{u.isAdmin ? <span style={{ color: 'var(--accent-pink)' }}>Admin</span> : 'User'}</td>
+                      <td>
+                        {u.isAdmin ? (
+                          <button disabled={busyId === u.id} onClick={() => runAction(u.id, 'demote')}>Demote</button>
+                        ) : (
+                          <button disabled={busyId === u.id} onClick={() => runAction(u.id, 'promote')}>Promote</button>
+                        )}
+                        <button
+                          className="admin-delete-btn"
+                          disabled={busyId === u.id}
+                          onClick={() => { if (window.confirm(`Delete account "${u.username}"? This can't be undone.`)) runAction(u.id, 'delete'); }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      );
+    };
+
+    // --- MediaPipe Cyber Canvas Component ---
+    // Shows the real engine feed once it's live (frame JPEG + 21-point
+    // landmarks streamed from ultimate_gesture_control.py over Socket.io);
+    // otherwise falls back to a decorative simulated hand skeleton so the
+    // landing page still looks alive before you log in / start the engine.
+    const HandCanvas = ({ height = "360px", engineActive = false, telemetry = null }) => {
+      const canvasRef = useRef(null);
+      const videoRef = useRef(null);
+      const pipVideoRef = useRef(null);
+      const [useWebcam, setUseWebcam] = useState(false);
+      const [isPoppedOut, setIsPoppedOut] = useState(false);
+      const frameImgRef = useRef(null);
+      const telemetryRef = useRef(null);
+      const engineActiveRef = useRef(false);
+
+      // Native browser Picture-in-Picture: a floating, always-on-top mini
+      // player that can be dragged anywhere on screen — over other browser
+      // tabs, or over any other app entirely — not just moved within this
+      // page. PiP only works on a <video>, so the live canvas is mirrored
+      // into a hidden one via captureStream().
+      const pipSupported = typeof document !== 'undefined' && 'pictureInPictureEnabled' in document;
+
+      const togglePopOut = async () => {
+        try {
+          if (document.pictureInPictureElement) {
+            await document.exitPictureInPicture();
+            return;
+          }
+          const canvas = canvasRef.current;
+          const video = pipVideoRef.current;
+          if (!canvas || !video || !canvas.captureStream) return;
+          if (!video.srcObject) {
+            video.srcObject = canvas.captureStream(30);
+          }
+          await video.play();
+          await video.requestPictureInPicture();
+        } catch (err) {
+          alert('Picture-in-Picture is not available in this browser.');
+        }
+      };
+
+      useEffect(() => {
+        const video = pipVideoRef.current;
+        if (!video) return undefined;
+        const onEnter = () => setIsPoppedOut(true);
+        const onLeave = () => setIsPoppedOut(false);
+        video.addEventListener('enterpictureinpicture', onEnter);
+        video.addEventListener('leavepictureinpicture', onLeave);
+        return () => {
+          video.removeEventListener('enterpictureinpicture', onEnter);
+          video.removeEventListener('leavepictureinpicture', onLeave);
+        };
+      }, []);
+
+      useEffect(() => {
+        telemetryRef.current = telemetry;
+        engineActiveRef.current = engineActive;
+        if (engineActive && telemetry && telemetry.frame) {
+          if (!frameImgRef.current) frameImgRef.current = new Image();
+          frameImgRef.current.src = telemetry.frame;
+        }
+      }, [telemetry, engineActive]);
+
+      const startWebcam = async () => {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+          if (videoRef.current) {
+            videoRef.current.srcObject = stream;
+            videoRef.current.play();
+            setUseWebcam(true);
+          }
+        } catch (err) {
+          alert('Webcam permission denied or unavailable. Cyber hand simulation mode active.');
+        }
+      };
+
+      useEffect(() => {
+        const canvas = canvasRef.current;
+        if (!canvas) return;
+        const ctx = canvas.getContext('2d');
+        let animId;
+        let t = 0;
+
+        const baseLandmarks = [
+          { x: 0, y: 120 }, { x: -30, y: 90 }, { x: -55, y: 55 }, { x: -75, y: 25 }, { x: -90, y: 0 },
+          { x: -30, y: -20 }, { x: -35, y: -65 }, { x: -38, y: -100 }, { x: -40, y: -130 },
+          { x: 0, y: -25 }, { x: 0, y: -75 }, { x: 0, y: -115 }, { x: 0, y: -145 },
+          { x: 30, y: -20 }, { x: 35, y: -65 }, { x: 38, y: -100 }, { x: 40, y: -128 },
+          { x: 55, y: -10 }, { x: 65, y: -45 }, { x: 72, y: -75 }, { x: 78, y: -100 }
+        ];
+
+        const render = () => {
+          t += 0.05;
+          const cw = canvas.width;
+          const ch = canvas.height;
+
+          // The Python engine already draws its own hand skeleton/HUD onto
+          // every frame it streams back — once it's live, just show that.
+          const liveFrame = frameImgRef.current;
+          const hasLiveFrame = engineActiveRef.current && liveFrame && liveFrame.complete && liveFrame.naturalWidth > 0;
+          ctx.clearRect(0, 0, cw, ch);
+
+          if (hasLiveFrame) {
+            ctx.drawImage(liveFrame, 0, 0, cw, ch);
+            animId = requestAnimationFrame(render);
+            return;
+          }
+
+          const liveTelemetry = telemetryRef.current;
+          const isLive = engineActiveRef.current && liveTelemetry && Array.isArray(liveTelemetry.landmarks) && liveTelemetry.landmarks.length >= 21;
+
+          const cx = isLive ? 0 : cw * 0.55 + Math.sin(t * 0.8) * 15;
+          const cy = isLive ? 0 : ch * 0.5 + Math.cos(t * 0.6) * 10;
+
+          const landmarks = isLive
+            ? liveTelemetry.landmarks.map((lm) => ({ x: lm.x * cw, y: lm.y * ch }))
+            : baseLandmarks.map((lm) => ({ x: cx + lm.x, y: cy + lm.y }));
+
+          landmarks.forEach((lm, idx) => {
+            ctx.beginPath();
+            ctx.arc(lm.x, lm.y, 6 + Math.sin(t * 3 + idx) * 2, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            ctx.fill();
+
+            ctx.beginPath();
+            ctx.arc(lm.x, lm.y, 3.5, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.shadowColor = '#00f2fe';
+            ctx.shadowBlur = 10;
+            ctx.fill();
+          });
+
+          const gestureLabel = isLive ? `${liveTelemetry.gesture || 'IDLE'} [${Math.round(liveTelemetry.confidence || 0)}%]` : 'OPEN PALM [98%]';
+          const tagX = landmarks[0].x - 70;
+          const tagY = landmarks[9] ? landmarks[9].y - 90 : cy - 188;
+          ctx.fillStyle = 'rgba(13, 15, 31, 0.85)';
+          ctx.fillRect(tagX, tagY, 160, 22);
+          ctx.fillStyle = '#00f2fe';
+          ctx.font = '600 11px JetBrains Mono';
+          ctx.fillText(`HAND_01 [${gestureLabel}]`, tagX + 6, tagY + 15);
+
+          animId = requestAnimationFrame(render);
+        };
+
+        render();
+        return () => cancelAnimationFrame(animId);
+      }, []);
+
+      const isLiveFeed = engineActive && telemetry && telemetry.frame;
+
+      return (
+        <div style={{ position: 'relative', width: '100%', height: height, borderRadius: '14px', overflow: 'hidden', background: '#04050a', border: '1px solid var(--border-color)' }}>
+          {useWebcam && !isLiveFeed ? (
+            <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
+          ) : (
+            !isLiveFeed && <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 40%, #131633 0%, #050611 100%)' }}></div>
+          )}
+
+          <canvas ref={canvasRef} width={650} height={400} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
+          {/* Mirrors the canvas so it can be handed to the browser's native Picture-in-Picture window (see togglePopOut). */}
+          <video ref={pipVideoRef} muted style={{ position: 'absolute', width: '1px', height: '1px', opacity: 0, pointerEvents: 'none' }} />
+
+          <div style={{ position: 'absolute', top: '0.8rem', left: '0.8rem', right: '0.8rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <span className="badge-status badge-live overlay-chip"><span className="badge-pulse-dot"></span> {isLiveFeed ? `LIVE ${Math.round(telemetry.fps || 0)} FPS` : 'DEMO PREVIEW'}</span>
+            <div style={{ display: 'flex', gap: '0.4rem' }}>
+              {pipSupported && (
+                <button onClick={togglePopOut} className="btn-secondary overlay-chip" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }} title="Pop out as a floating window you can move anywhere, including over other apps">
+                  🗗 {isPoppedOut ? 'Popped Out' : 'Pop Out'}
+                </button>
+              )}
+              {!isLiveFeed && (
+                <button onClick={startWebcam} className="btn-secondary overlay-chip" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }}>
+                  📷 {useWebcam ? 'Webcam Active' : 'Enable Real Webcam'}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    // --- Main Single Page Application Component ---
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('landing');
+      const [mode, setMode] = useState('Mouse Control');
+      const [typedText, setTypedText] = useState('');
+      const [isOrbOpen, setIsOrbOpen] = useState(false);
+      const [showQrModal, setShowQrModal] = useState(false);
+      const [adminPanelOpen, setAdminPanelOpen] = useState(false);
+
+      // --- Auth ---
+      const [user, setUser] = useState(null);
+      const [authChecked, setAuthChecked] = useState(false);
+      // The page itself (landing/dashboard/analytics/etc.) is browsable
+      // without logging in — this only controls the login/signup modal,
+      // shown on demand when a logged-out visitor tries to do something
+      // that actually needs a session (start the engine, pair a phone).
+      const [showAuthGate, setShowAuthGate] = useState(false);
+      const pendingActionRef = useRef(null);
+
+      // Runs `fn` immediately if logged in; otherwise opens the login modal
+      // and remembers `fn` to run right after a successful login/signup.
+      const requireLogin = useCallback((fn) => {
+        if (user) { fn(); return; }
+        pendingActionRef.current = fn;
+        setShowAuthGate(true);
+      }, [user]);
+
+      const handleAuthenticated = useCallback((authedUser) => {
+        setUser(authedUser);
+        setShowAuthGate(false);
+        const pending = pendingActionRef.current;
+        pendingActionRef.current = null;
+        if (pending) pending();
+      }, []);
+
+      // --- Real backend/engine state (driven by REST + Socket.io) ---
+      const [backendConnected, setBackendConnected] = useState(false);
+      const [isEngineRunning, setIsEngineRunning] = useState(false);
+      const [telemetry, setTelemetry] = useState(null);
+      const [phoneConnected, setPhoneConnected] = useState(false);
+      const [phoneSession, setPhoneSession] = useState(null);
+      const [phoneError, setPhoneError] = useState('');
+
+      // --- Browser-side voice typing (Web Speech API) ---
+      const recognitionRef = useRef(null);
+      const [browserListening, setBrowserListening] = useState(false);
+      const [browserHeard, setBrowserHeard] = useState('');
+
+      const gesture = isEngineRunning && telemetry ? (telemetry.gesture || 'IDLE') : 'Open Palm';
+      const confidence = isEngineRunning && telemetry ? Math.round(telemetry.confidence || 0) : 98;
+      const action = isEngineRunning ? (telemetry && telemetry.keyboard && telemetry.keyboard.active ? 'Air Typing' : 'Live Tracking') : 'Move Cursor';
+      const latency = isEngineRunning && telemetry ? Math.round(telemetry.latency || 0) : 18;
+      const aiResponse = isEngineRunning
+        ? `Engine is live — tracking "${gesture}" at ${confidence}% confidence.`
+        : 'Engine is idle. Press Start Engine to begin gesture tracking.';
+      // Prefer the browser mic (Web Speech API) when it's the one listening;
+      // fall back to the Python engine's own PC-mic telemetry otherwise.
+      const voiceEnabled = browserListening || !!(isEngineRunning && telemetry && telemetry.voice && telemetry.voice.enabled);
+      const voiceHeardText = browserHeard || (isEngineRunning && telemetry && telemetry.voice ? telemetry.voice.text : '');
+
+      // System metrics: simulated while idle, real telemetry once the engine is live.
+      const [cpu, setCpu] = useState(22);
+      const [gpu, setGpu] = useState(18);
+
+      useEffect(() => {
+        if (isEngineRunning) return;
+        const interval = setInterval(() => {
+          setCpu(Math.floor(20 + Math.random() * 6));
+          setGpu(Math.floor(16 + Math.random() * 5));
+        }, 2000);
+        return () => clearInterval(interval);
+      }, [isEngineRunning]);
+
+      useEffect(() => {
+        if (isEngineRunning && telemetry) {
+          setCpu(Math.round(telemetry.cpu ?? 22));
+          setGpu(Math.round(telemetry.gpu ?? 18));
+        }
+      }, [isEngineRunning, telemetry]);
+
+      // On first load, see if a session cookie already proves we're logged in.
+      useEffect(() => {
+        fetch('/api/auth/me', AUTH_OPTS)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => { if (data && data.success) setUser(data.user); })
+          .catch(() => {})
+          .finally(() => setAuthChecked(true));
+      }, []);
+
+      // The socket only connects once logged in — the backend rejects the
+      // handshake outright otherwise.
+      useEffect(() => {
+        if (!user) return undefined;
+        socket.connect();
+        return () => socket.disconnect();
+      }, [user]);
+
+      // Live link to the Node/Express backend, which spawns
+      // ultimate_gesture_control.py and forwards its per-frame telemetry.
+      useEffect(() => {
+        const handleConnect = () => setBackendConnected(true);
+        const handleDisconnect = () => { setBackendConnected(false); setIsEngineRunning(false); };
+        const handleConnectError = (err) => {
+          if (err && err.message === 'Not authenticated') setUser(null);
+        };
+        const handleFrame = (payload) => {
+          setTelemetry(payload);
+          setIsEngineRunning(!!payload.engineActive);
+        };
+        const handleEngineStatus = ({ active }) => setIsEngineRunning(active);
+        const handlePhoneStatus = ({ connected }) => setPhoneConnected(!!connected);
+
+        socket.on('connect', handleConnect);
+        socket.on('disconnect', handleDisconnect);
+        socket.on('connect_error', handleConnectError);
+        socket.on('ai-frame', handleFrame);
+        socket.on('engine-status', handleEngineStatus);
+        socket.on('phone-status', handlePhoneStatus);
+
+        return () => {
+          socket.off('connect', handleConnect);
+          socket.off('disconnect', handleDisconnect);
+          socket.off('connect_error', handleConnectError);
+          socket.off('ai-frame', handleFrame);
+          socket.off('engine-status', handleEngineStatus);
+          socket.off('phone-status', handlePhoneStatus);
+        };
+      }, []);
+
+      const handleLogout = useCallback(async () => {
+        try { await fetch('/api/auth/logout', { method: 'POST', ...AUTH_OPTS }); } catch (err) { /* clear local state below regardless */ }
+        setUser(null);
+        setIsEngineRunning(false);
+        setTelemetry(null);
+      }, []);
+
+      const doToggleEngine = useCallback(async () => {
+        try {
+          const res = await fetch('/api/engine/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            ...AUTH_OPTS,
+            body: JSON.stringify({ cameraSource: phoneConnected ? 'phone' : '' })
+          });
+          const data = await res.json();
+          setIsEngineRunning(!!data.engineActive);
+        } catch (err) {
+          console.error('Could not reach the AI-GOS backend:', err);
+        }
+      }, [phoneConnected]);
+      // Clicking Start Engine while logged out opens the login modal instead
+      // of erroring — the backend would 401 on this endpoint anyway.
+      const handleToggleEngine = useCallback(() => requireLogin(doToggleEngine), [requireLogin, doToggleEngine]);
+
+      const handleEngineCommand = useCallback((command) => {
+        socket.emit('engine-command', command);
+      }, []);
+
+      const stopBrowserListening = useCallback(() => {
+        if (recognitionRef.current) recognitionRef.current.stop();
+        setBrowserListening(false);
+      }, []);
+
+      const startBrowserListening = useCallback(() => {
+        if (!SpeechRecognitionAPI) {
+          // No Web Speech API in this browser (e.g. Firefox) — fall back to
+          // the engine's own PC-mic listening, which needs no browser
+          // permission since the browser isn't the one touching the mic.
+          handleEngineCommand('TOGGLE_VOICE');
+          return;
+        }
+        const recognition = new SpeechRecognitionAPI();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+        recognition.onresult = (event) => {
+          let interim = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            const transcript = event.results[i][0].transcript;
+            if (event.results[i].isFinal) {
+              const phrase = transcript.trim();
+              if (phrase) socket.emit('engine-command', 'VOICE_PHRASE:' + phrase);
+              setBrowserHeard(phrase);
+            } else {
+              interim += transcript;
+            }
+          }
+          if (interim) setBrowserHeard(interim);
+        };
+        recognition.onerror = (event) => {
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+            alert("Microphone permission was denied. Allow this site to use your microphone (check the site/lock icon in your browser's address bar) to use voice typing.");
+          }
+          setBrowserListening(false);
+        };
+        recognition.onend = () => setBrowserListening(false);
+        try {
+          // This .start() call is what triggers the browser's native
+          // microphone permission prompt the first time it runs.
+          recognition.start();
+          recognitionRef.current = recognition;
+          setBrowserListening(true);
+        } catch (err) {
+          setBrowserListening(false);
+        }
+      }, [handleEngineCommand]);
+
+      const handleToggleListening = useCallback(() => {
+        if (browserListening) stopBrowserListening();
+        else if (voiceEnabled) handleEngineCommand('TOGGLE_VOICE'); // PC-mic path is on; toggle it off
+        else startBrowserListening();
+      }, [browserListening, voiceEnabled, stopBrowserListening, startBrowserListening, handleEngineCommand]);
+
+      // Release the microphone if the tab/component goes away or the engine stops.
+      useEffect(() => () => { if (recognitionRef.current) recognitionRef.current.stop(); }, []);
+      useEffect(() => {
+        if (!isEngineRunning && browserListening) stopBrowserListening();
+      }, [isEngineRunning, browserListening, stopBrowserListening]);
+
+      const doOpenQrModal = async () => {
+        setShowQrModal(true);
+        setPhoneError('');
+        setPhoneSession(null);
+        try {
+          const res = await fetch('/api/phone-session/new', AUTH_OPTS);
+          if (!res.ok) throw new Error('Backend returned an error');
+          const data = await res.json();
+          setPhoneSession(data);
+        } catch (err) {
+          setPhoneError('Could not reach the AI-GOS backend. Is it running?');
+        }
+      };
+      const openQrModal = () => requireLogin(doOpenQrModal);
+
+      const handleDisconnectPhone = useCallback(() => {
+        if (!window.confirm('Disconnect the paired phone camera? The engine will fall back to the PC webcam.')) return;
+        fetch('/api/phone-session/disconnect', { method: 'POST', ...AUTH_OPTS })
+          .then(() => setPhoneConnected(false))
+          .catch((err) => console.error('Could not reach the AI-GOS backend:', err));
+      }, []);
+
+      // Chart.js Canvas Initialization for Screen 03 (Analytics)
+      const lineChartRef = useRef(null);
+      const pieChartRef = useRef(null);
+
+      useEffect(() => {
+        if (activeTab === 'analytics') {
+          // Line Chart
+          if (lineChartRef.current) {
+            const ctx = lineChartRef.current.getContext('2d');
+            new Chart(ctx, {
+              type: 'line',
+              data: {
+                labels: ['00:00', '04:00', '08:00', '12:00', '16:00', '20:00', '24:00'],
+                datasets: [
+                  { label: 'Open Palm', data: [20, 10, 85, 140, 165, 95, 40], borderColor: '#00f2fe', tension: 0.4 },
+                  { label: 'Pinch', data: [15, 8, 60, 110, 130, 75, 30], borderColor: '#7f00ff', tension: 0.4 },
+                  { label: 'Fist', data: [8, 4, 30, 55, 70, 40, 15], borderColor: '#ff007f', tension: 0.4 }
+                ]
+              },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b92b3' } } } }
+            });
+          }
+
+          // Pie Chart
+          if (pieChartRef.current) {
+            const ctxPie = pieChartRef.current.getContext('2d');
+            new Chart(ctxPie, {
+              type: 'doughnut',
+              data: {
+                labels: ['Open Palm (35%)', 'Pinch (28%)', 'Fist (15%)', 'Peace (12%)', 'Thumbs Up (10%)'],
+                datasets: [{ data: [35, 28, 15, 12, 10], backgroundColor: ['#00f2fe', '#7f00ff', '#ff007f', '#00ffcc', '#ffaa00'] }]
+              },
+              options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { labels: { color: '#8b92b3' } } } }
+            });
+          }
+        }
+      }, [activeTab]);
+
+      if (!authChecked) {
+        return <div className="auth-wrap"></div>;
+      }
+
+      return (
+        <div className="app-container">
+
+          {/* Top Navbar */}
+          <header className="top-navbar">
+            <div className="logo-group" onClick={() => setActiveTab('landing')}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--gradient-main)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                ⚡
+              </div>
+              <span className="logo-badge">AI-GOS</span>
+            </div>
+
+            <nav className="nav-pills">
+              {[
+                { id: 'landing', label: '01 Landing Page' },
+                { id: 'dashboard', label: '02 Dashboard' },
+                { id: 'analytics', label: '03 Gesture Analytics' },
+                { id: 'keyboard', label: '04 Virtual Keyboard & Voice AI' },
+                { id: 'settings', label: '05 Phone & Settings' }
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+              <span className="badge-status badge-live" title={backendConnected ? 'Connected to AI-GOS backend' : 'Backend unreachable — run npm start in backend/'}>
+                <span className="status-dot" style={{ background: backendConnected ? 'var(--accent-green)' : 'var(--accent-pink)' }}></span> {backendConnected ? (isEngineRunning ? 'Engine Running' : 'Backend Online') : 'Backend Offline'}
+              </span>
+              <button
+                onClick={handleToggleEngine}
+                disabled={user && !backendConnected}
+                title={!user ? 'Log in to start the engine' : backendConnected ? '' : 'Start the backend (npm start in backend/) first'}
+                style={{ background: isEngineRunning ? 'rgba(255, 0, 127, 0.15)' : 'rgba(0, 242, 254, 0.15)', border: '1px solid rgba(255, 0, 127, 0.3)', color: isEngineRunning ? 'var(--accent-pink)' : 'var(--primary)', padding: '0.45rem 0.9rem', borderRadius: '8px', cursor: (user && !backendConnected) ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.8rem', opacity: (user && !backendConnected) ? 0.5 : 1 }}
+              >
+                {isEngineRunning ? 'Stop Engine' : 'Start Engine'}
+              </button>
+              {user ? (
+                <>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user.username}{user.isAdmin ? ' (admin)' : ''}</span>
+                  {user.isAdmin && (
+                    <button className="btn-secondary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }} onClick={() => setAdminPanelOpen(true)}>Users</button>
+                  )}
+                  <button className="btn-secondary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }} onClick={handleLogout}>Log out</button>
+                </>
+              ) : (
+                <button className="btn-primary" style={{ padding: '0.4rem 0.9rem', fontSize: '0.8rem' }} onClick={() => setShowAuthGate(true)}>Log In / Sign Up</button>
+              )}
+            </div>
+          </header>
+
+          {/* Views Container */}
+          <main style={{ padding: '2rem 3rem', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+            
+            {/* VIEW 01: LANDING PAGE */}
+            {activeTab === 'landing' && (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '3rem', alignItems: 'center', marginBottom: '3.5rem' }}>
+                  <div>
+                    <div style={{ display: 'inline-flex', gap: '0.4rem', background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.25)', color: 'var(--primary)', padding: '0.35rem 0.9rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, marginBottom: '1.2rem' }}>
+                      ✨ Next Generation AI Operating System
+                    </div>
+                    <h1 style={{ fontSize: '3.6rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1.2rem' }}>
+                      Control Your Computer <br />
+                      <span className="logo-badge">Without Touching It</span>
+                    </h1>
+                    <p style={{ fontSize: '1.1rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '2rem', maxWidth: '540px' }}>
+                      AI-powered gesture recognition that understands you. Move, click, type and control everything with your hands.
+                    </p>
+                    <div style={{ display: 'flex', gap: '1rem' }}>
+                      <button className="btn-primary" onClick={() => setActiveTab('dashboard')}>Launch AI-GOS ➔</button>
+                      <button className="btn-secondary" onClick={() => setActiveTab('settings')}>📱 Connect Phone Camera</button>
+                    </div>
+                  </div>
+                  <div>
+                    <HandCanvas height="400px" engineActive={isEngineRunning} telemetry={telemetry} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                  {[
+                    { title: 'Real-time Gesture Control', desc: 'High accuracy 21-point hand tracking & recognition.', icon: '🖐️' },
+                    { title: 'Virtual Keyboard', desc: 'Type anything in the air with spatial position detection.', icon: '⌨️' },
+                    { title: 'Voice Assistant', desc: 'AI voice control & hands-free machine commands.', icon: '🎙️' },
+                    { title: 'Phone Camera', desc: 'Use your phone as a wireless HD webcam.', icon: '📱' }
+                  ].map((f, i) => (
+                    <div key={i} className="glass-card">
+                      <div style={{ fontSize: '1.8rem', marginBottom: '0.8rem' }}>{f.icon}</div>
+                      <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.4rem' }}>{f.title}</h3>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{f.desc}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 02: DASHBOARD (LIVE CONTROL CENTER) */}
+            {activeTab === 'dashboard' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1.5rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div className="glass-card">
+                    <div className="glass-card-header">
+                      <div className="card-title">👁️ LIVE CAMERA CONTROL CENTER</div>
+                      <span className="badge-status badge-live"><span className="badge-pulse-dot"></span> {isEngineRunning ? 'Active Feed' : 'Idle'}</span>
+                    </div>
+                    <HandCanvas height="380px" engineActive={isEngineRunning} telemetry={telemetry} />
+                  </div>
+
+                  <div className="glass-card">
+                    <div className="glass-card-header">
+                      <div className="card-title">🛡️ ENGINE STATUS</div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.8rem' }}>
+                      {[
+                        { name: 'AI Core Engine', ok: isEngineRunning },
+                        { name: 'Python ML Engine', ok: isEngineRunning },
+                        { name: 'MediaPipe Vision', ok: isEngineRunning },
+                        { name: 'OpenCV Stream', ok: isEngineRunning },
+                        { name: 'Windows API Bridge', ok: backendConnected },
+                        { name: 'Phone Stream', ok: phoneConnected }
+                      ].map(({ name, ok }, i) => (
+                        <div key={i} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--border-color)', borderRadius: '10px', padding: '0.75rem 0.9rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
+                          <span>{name}</span>
+                          <span style={{ color: ok ? 'var(--accent-green)' : 'var(--text-muted)', fontWeight: 600 }}>{ok ? '● Connected' : '○ Idle'}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                  <div className="glass-card" style={{ border: '1px solid rgba(0, 242, 254, 0.3)' }}>
+                    <div className="glass-card-header">
+                      <div className="card-title">⚡ AI DECISION ENGINE</div>
+                    </div>
+                    <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: '12px', padding: '1rem', marginBottom: '1rem' }}>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Detected Gesture</div>
+                      <div style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-green)', margin: '0.3rem 0' }}>{gesture}</div>
+                      <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden' }}>
+                        <div style={{ width: `${confidence}%`, height: '100%', background: 'var(--gradient-main)' }}></div>
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.8rem' }}>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.7rem', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Action</span>
+                        <div style={{ fontWeight: 700 }}>{action}</div>
+                      </div>
+                      <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.7rem', borderRadius: '8px' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Latency</span>
+                        <div style={{ fontWeight: 700, color: 'var(--accent-green)' }}>{latency} ms</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="glass-card">
+                    <div className="glass-card-header">
+                      <div className="card-title">💻 SYSTEM PERFORMANCE</div>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 4 }}>
+                          <span>CPU Usage</span><span>{cpu}%</span>
+                        </div>
+                        <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: `${cpu}%`, height: '100%', background: 'var(--primary)' }}></div>
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 4 }}>
+                          <span>GPU Usage</span><span>{gpu}%</span>
+                        </div>
+                        <div style={{ width: '100%', height: '6px', background: 'rgba(255,255,255,0.1)', borderRadius: 3, overflow: 'hidden' }}>
+                          <div style={{ width: `${gpu}%`, height: '100%', background: 'var(--primary-purple)' }}></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 03: GESTURE ANALYTICS */}
+            {activeTab === 'analytics' && (
+              <div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                  {[
+                    { label: 'Total Gestures', val: '1,248', change: '+12.5%' },
+                    { label: 'Accuracy', val: '99.2%', change: '+2.1%' },
+                    { label: 'Avg. Confidence', val: '97.4%', change: '+1.8%' },
+                    { label: 'Total Clicks', val: '542', change: '+8.3%' }
+                  ].map((m, i) => (
+                    <div key={i} className="glass-card">
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{m.label}</div>
+                      <div style={{ fontSize: '1.8rem', fontWeight: 800, margin: '0.4rem 0' }}>{m.val}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--accent-green)' }}>{m.change} vs yesterday</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr', gap: '1.5rem' }}>
+                  <div className="glass-card">
+                    <div className="glass-card-header"><div className="card-title">📈 GESTURE OVER TIME</div></div>
+                    <div style={{ height: '300px' }}><canvas ref={lineChartRef}></canvas></div>
+                  </div>
+                  <div className="glass-card">
+                    <div className="glass-card-header"><div className="card-title">🍩 GESTURE DISTRIBUTION</div></div>
+                    <div style={{ height: '300px' }}><canvas ref={pieChartRef}></canvas></div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 04: VIRTUAL KEYBOARD & VOICE AI */}
+            {activeTab === 'keyboard' && (
+              <div>
+                <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
+                  <div className="glass-card-header">
+                    <div className="card-title">⌨️ VIRTUAL AIR KEYBOARD</div>
+                  </div>
+                  <div style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid var(--border-glow)', borderRadius: '12px', padding: '1rem 1.5rem', fontSize: '1.2rem', fontFamily: 'var(--font-mono)', minHeight: '60px', marginBottom: '1.5rem' }}>
+                    {isEngineRunning && telemetry && telemetry.keyboard ? (telemetry.keyboard.text || '') : typedText}
+                    <span className="badge-pulse-dot" style={{ display: 'inline-block', marginLeft: 4 }}></span>
+                  </div>
+
+                  {isEngineRunning ? (
+                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      Live air-typed text from the engine. Send <strong>TOGGLE_KEYBOARD</strong> below (K) to show/hide the AI-GOS keyboard overlay, or <strong>CLEAR</strong> (C) to clear it.
+                    </p>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '800px', margin: '0 auto' }}>
+                      {[['Q','W','E','R','T','Y','U','I','O','P'], ['A','S','D','F','G','H','J','K','L'], ['Z','X','C','V','B','N','M']].map((row, r) => (
+                        <div key={r} style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem' }}>
+                          {row.map(char => (
+                            <button key={char} onClick={() => setTypedText(prev => prev + char.toLowerCase())} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: '#fff', width: '50px', height: '46px', borderRadius: 8, fontSize: '1.1rem', cursor: 'pointer' }}>
+                              {char}
+                            </button>
+                          ))}
+                        </div>
+                      ))}
+                      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', marginTop: '0.4rem' }}>
+                        <button onClick={() => setTypedText(prev => prev + ' ')} style={{ width: '300px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: '#fff', borderRadius: 8, cursor: 'pointer' }}>Space</button>
+                        <button onClick={() => setTypedText('')} style={{ background: 'rgba(255,0,127,0.15)', color: 'var(--accent-pink)', border: '1px solid rgba(255,0,127,0.3)', padding: '0.6rem 1.2rem', borderRadius: 8, cursor: 'pointer' }}>Clear</button>
+                      </div>
+                      <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.4rem' }}>Manual demo keyboard — start the engine for real air-typing.</p>
+                    </div>
+                  )}
+                </div>
+
+                <div className="glass-card">
+                  <div className="glass-card-header">
+                    <div className="card-title">🎙️ VOICE AI ASSISTANT</div>
+                    <span className="badge-status badge-live">
+                      <span className={`status-dot ${voiceEnabled ? 'badge-pulse-dot' : ''}`} style={{ background: voiceEnabled ? 'var(--accent-green)' : 'var(--text-muted)', color: 'var(--accent-green)' }}></span>
+                      {voiceEnabled ? 'Listening' : 'Standby'}
+                    </span>
+                  </div>
+
+                  <button
+                    className="btn-primary"
+                    onClick={handleToggleListening}
+                    disabled={!isEngineRunning}
+                    title={!isEngineRunning ? 'Start the engine first' : SpeechRecognitionAPI ? "Uses this browser's microphone — it will ask permission the first time" : 'This browser has no built-in speech recognition; falls back to the PC microphone'}
+                    style={{ width: '100%', justifyContent: 'center', marginBottom: '1rem', opacity: isEngineRunning ? 1 : 0.5, cursor: isEngineRunning ? 'pointer' : 'not-allowed', background: voiceEnabled ? 'rgba(255, 0, 127, 0.15)' : undefined, color: voiceEnabled ? 'var(--accent-pink)' : undefined, boxShadow: voiceEnabled ? 'none' : undefined }}
+                  >
+                    {voiceEnabled ? '⏹️ Stop Listening' : '🎙️ Start Listening'}
+                  </button>
+                  {!SpeechRecognitionAPI && (
+                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.72rem', marginTop: '-0.6rem', marginBottom: '1rem' }}>
+                      This browser can't do speech recognition itself, so this uses the PC's microphone instead (no browser permission prompt). Try Chrome or Edge for browser-mic voice typing.
+                    </p>
+                  )}
+
+                  <div className="waveform-container" style={{ marginBottom: '1rem', opacity: voiceEnabled ? 1 : 0.25 }}>
+                    {[40, 80, 100, 60, 90, 50, 85, 45, 95, 70].map((h, i) => (
+                      <div key={i} className="wave-bar" style={{ height: `${h}%`, animationDelay: `${i * 0.1}s`, animationPlayState: voiceEnabled ? 'running' : 'paused' }}></div>
+                    ))}
+                  </div>
+
+                  <div style={{ background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-glow)', borderRadius: '12px', padding: '1rem', marginBottom: '1rem', minHeight: '50px' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
+                      {voiceEnabled ? 'HEARD (LIVE)' : 'LAST HEARD'}
+                    </div>
+                    <div style={{ fontSize: '1.05rem', fontFamily: 'var(--font-mono)' }}>
+                      {voiceHeardText ? `"${voiceHeardText}"` : (voiceEnabled ? 'Listening…' : '—')}
+                    </div>
+                  </div>
+
+                  <p style={{ textAlign: 'center', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                    {aiResponse}
+                  </p>
+                  <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: '1rem' }}>
+                    Click Start Listening (or send <strong>TOGGLE_VOICE</strong> below / press V), then just speak —
+                    it dictates straight into the keyboard buffer above. Say "space", "enter", "clear", or "delete" as commands.
+                  </p>
+                  <div className="glass-card-header"><div className="card-title" style={{ fontSize: '0.9rem' }}>ENGINE CONTROLS</div></div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.6rem' }}>
+                    {ENGINE_COMMANDS.map(({ cmd, label, title }) => (
+                      <button
+                        key={cmd}
+                        className="btn-secondary"
+                        title={title}
+                        disabled={!isEngineRunning}
+                        onClick={() => handleEngineCommand(cmd)}
+                        style={{ justifyContent: 'center', opacity: isEngineRunning ? 1 : 0.5, fontSize: '0.8rem' }}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* VIEW 05: PHONE CAMERA & SETTINGS */}
+            {activeTab === 'settings' && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                <div className="glass-card">
+                  <div className="glass-card-header">
+                    <div className="card-title">📱 PHONE CAMERA BRIDGE</div>
+                    <span className="badge-status badge-live">
+                      <span className="status-dot" style={{ background: phoneConnected ? 'var(--accent-green)' : 'var(--text-muted)' }}></span>
+                      {phoneConnected ? 'Connected' : 'Not connected'}
+                    </span>
+                  </div>
+                  <HandCanvas height="240px" engineActive={isEngineRunning} telemetry={telemetry} />
+                  <div style={{ marginTop: '1rem', display: 'flex', gap: '0.8rem' }}>
+                    <button className="btn-primary" onClick={openQrModal}>QR Pair Phone</button>
+                    {phoneConnected && (
+                      <button className="btn-secondary" onClick={handleDisconnectPhone}>Disconnect</button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="glass-card">
+                  <div className="glass-card-header"><div className="card-title">⚙️ ENGINE SETTINGS</div></div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Camera Source</label>
+                      <div style={{ width: '100%', padding: '0.6rem', background: '#000', color: '#fff', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '0.3rem', fontSize: '0.85rem' }}>
+                        {phoneConnected ? 'Phone Camera (WebRTC) — used automatically while connected' : 'PC Webcam — connect a phone above to switch to it automatically'}
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Mouse Speed (1.2x)</label>
+                      <input type="range" className="custom-range" defaultValue={50} style={{ marginTop: '0.4rem' }} />
+                    </div>
+                    <button className="btn-primary" onClick={() => alert('Settings Saved!')}>Save Engine Settings</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          </main>
+
+          {/* Floating AI Orb Trigger */}
+          <button className="ai-orb-button" onClick={() => setIsOrbOpen(!isOrbOpen)}>🤖</button>
+
+          {isOrbOpen && (
+            <div className="ai-drawer">
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
+                <strong>AI-GOS Assistant</strong>
+                <button onClick={() => setIsOrbOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
+              </div>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.8rem' }}>{aiResponse}</p>
+              <input type="text" placeholder="Ask AI-GOS..." style={{ width: '100%', padding: '0.5rem', background: '#000', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '8px' }} />
+            </div>
+          )}
+
+          {/* QR Modal */}
+          {showQrModal && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowQrModal(false)}>
+              <div className="glass-card" style={{ textAlign: 'center', padding: '2rem', maxWidth: '360px' }} onClick={(e) => e.stopPropagation()}>
+                <h3>Scan QR to Connect Smartphone</h3>
+
+                {phoneError && <p className="auth-error">{phoneError}</p>}
+                {!phoneSession && !phoneError && <p style={{ color: 'var(--text-muted)' }}>Generating session…</p>}
+
+                {phoneSession && (
+                  <>
+                    <img src={phoneSession.qr} alt="QR code — scan with your phone" style={{ width: '200px', height: '200px', margin: '1rem auto', display: 'block', borderRadius: '12px' }} />
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.8rem' }}>
+                      Scan with your phone's camera app. Phone and this PC must be on the same Wi-Fi. Your phone will
+                      show a certificate warning the first time — tap <strong>Advanced → Proceed</strong> (this PC's
+                      own self-signed certificate, safe for a server you're running yourself).
+                    </p>
+                    <div style={{ fontSize: '0.75rem', color: phoneConnected ? 'var(--accent-green)' : 'var(--text-muted)', marginBottom: '1rem' }}>
+                      {phoneConnected ? '● Phone connected — it will be used as the camera on Start Engine' : '○ Waiting for phone to connect…'}
+                    </div>
+                  </>
+                )}
+
+                <button className="btn-primary" onClick={() => setShowQrModal(false)}>Close</button>
+              </div>
+            </div>
+          )}
+
+          {adminPanelOpen && user && user.isAdmin && (
+            <AdminPanel currentUser={user} onClose={() => setAdminPanelOpen(false)} />
+          )}
+
+          {showAuthGate && (
+            <AuthGate onAuthenticated={handleAuthenticated} onClose={() => { setShowAuthGate(false); pendingActionRef.current = null; }} />
+          )}
+
+        </div>
+      );
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
