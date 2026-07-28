@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>AI-GOS — Phone Camera</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: #0b0f14; color: #e9edf2;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center; padding: 16px;
+  }
+  h1 { font-size: 1.05rem; margin: 8px 0 4px; letter-spacing: 0.5px; }
+  .sub { color: #8a97a8; font-size: 0.8rem; margin-bottom: 16px; text-align: center; }
+  .video-wrap {
+    position: relative; width: 100%; max-width: 480px; aspect-ratio: 4 / 3;
+    background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #1f2a37;
+  }
+  video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .status-pill {
+    position: absolute; top: 10px; left: 10px; padding: 5px 10px; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px;
+    background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+  }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+  .dot-live { background:#2ecc71; }
+  .dot-wait { background:#f5a623; animation: blink 1.2s infinite; }
+  .dot-err { background:#ff3b5c; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+  .controls { display: flex; gap: 10px; margin-top: 16px; width: 100%; max-width: 480px; }
+  button {
+    flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 0.9rem;
+    font-weight: 700; background: #1f2a37; color: #e9edf2; cursor: pointer;
+  }
+  button:active { background: #2a3a4d; }
+  .error-box {
+    margin-top: 16px; padding: 12px 14px; background: #2a1420; border: 1px solid #ff3b5c;
+    border-radius: 10px; font-size: 0.85rem; max-width: 480px; display: none;
+  }
+  .frame-count { color: #8a97a8; font-size: 0.75rem; margin-top: 10px; }
+</style>
+</head>
+<body>
+  <h1>AI-GOS · Phone Camera</h1>
+  <div class="sub">Keep this tab open and your phone awake. Point the camera at your hand.</div>
+
+  <div class="video-wrap">
+    <video id="preview" autoplay playsinline muted></video>
+    <div class="status-pill" id="statusPill"><span class="dot dot-wait" id="statusDot"></span><span id="statusText">Requesting camera…</span></div>
+  </div>
+
+  <div class="controls">
+    <button id="flipBtn">Flip Camera</button>
+  </div>
+
+  <div class="frame-count" id="frameCount"></div>
+  <div class="error-box" id="errorBox"></div>
+
+  <script>
+    const sessionId = window.location.pathname.split('/').filter(Boolean).pop();
+    const video = document.getElementById('preview');
+    const statusDot = document.getElementById('statusDot');
+    const statusText = document.getElementById('statusText');
+    const errorBox = document.getElementById('errorBox');
+    const frameCount = document.getElementById('frameCount');
+    const flipBtn = document.getElementById('flipBtn');
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let stream = null;
+    let facingMode = 'environment';
+    let sent = 0;
+    let posting = false;
+    let captureTimer = null;
+
+    function setStatus(state, text) {
+      statusDot.className = 'dot ' + (state === 'live' ? 'dot-live' : state === 'error' ? 'dot-err' : 'dot-wait');
+      statusText.textContent = text;
+    }
+
+    function showError(message) {
+      errorBox.style.display = 'block';
+      errorBox.textContent = message;
+      setStatus('error', 'Error');
+    }
+
+    async function startCamera() {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      setStatus('wait', 'Requesting camera…');
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
+          audio: false
+        });
+        video.srcObject = stream;
+        setStatus('wait', 'Connecting…');
+        beginCapture();
+      } catch (err) {
+        showError(
+          'Camera access failed: ' + (err && err.message ? err.message : err) +
+          '. Make sure you tapped "Allow" and that this page is loaded over HTTPS.'
+        );
+      }
+    }
+
+    function beginCapture() {
+      if (captureTimer) clearInterval(captureTimer);
+      captureTimer = setInterval(captureAndSend, 33); // ~30 fps; local Wi-Fi has headroom and
+      // mouse-move smoothness is directly tied to this rate
+    }
+
+    function captureAndSend() {
+      if (posting || !video.videoWidth) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) return;
+          posting = true;
+          fetch('/api/phone-frame/' + sessionId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: blob
+          })
+            .then((res) => {
+              if (res.ok) {
+                sent += 1;
+                frameCount.textContent = 'Frames sent: ' + sent;
+                setStatus('live', 'Streaming to AI-GOS');
+              } else if (res.status === 410) {
+                setStatus('error', 'Session ended');
+                clearInterval(captureTimer);
+              }
+            })
+            .catch(() => setStatus('wait', 'Reconnecting…'))
+            .finally(() => { posting = false; });
+        },
+        'image/jpeg',
+        0.85
+      );
+    }
+
+    flipBtn.addEventListener('click', () => {
+      facingMode = facingMode === 'environment' ? 'user' : 'environment';
+      startCamera();
+    });
+
+    startCamera();
+  </script>
+</body>
+</html>
