@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # AI-GOS - Single Page Frontend
 
 This is the frontend for **AI-GOS (Next Generation AI Operating System)**. It's a
@@ -39,3 +40,6 @@ or sign up, then use Start Engine / Connect Phone Camera as normal.
   all views.
 - **Auth**: Log in / sign up against the backend's session-cookie auth, plus a
   lightweight admin user-management panel for admin accounts.
+=======
+# G-O-S-tracking
+>>>>>>> 8d34e744c4f3772ae2d2dba08e9784d92cf41db9
