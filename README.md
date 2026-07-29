@@ -46,3 +46,9 @@ gos/
 ├── index.html       # this frontend
 └── backend/         # Node/Express + Socket.io backend (see backend/README or server.js)
 ```
+
+## Related repositories
+
+The Python hand-gesture AI engine (`ultimate_gesture_control.py`) that this
+backend spawns lives in a separate repo:
+[G-O-S-tracking-engine](https://github.com/antarjeet/G-O-S-tracking-engine).
