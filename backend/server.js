@@ -13,6 +13,7 @@ const fs = require('fs');
 const selfsigned = require('selfsigned');
 const QRCode = require('qrcode');
 const { router: authRouter, requireAuth, getUserFromToken, parseCookieHeader, COOKIE_NAME, ensureAdminFromEnv } = require('./auth');
+const db = require('./db');
 
 // --- Self-signed HTTPS certificate (cached to disk across restarts) ---
 // Phone camera capture (getUserMedia) requires a "secure context". Browsers
@@ -82,16 +83,16 @@ async function main() {
   // API (replacing the old ai-gos-hud Vite dev server on a separate port),
   // so its fetch()/Socket.io calls hit relative URLs with no CORS or
   // cross-origin cookie concerns.
-  app.use(express.static(path.join(__dirname, '..', 'gos')));
+  app.use(express.static(path.join(__dirname, '..')));
   app.use(express.static(path.join(__dirname, 'public')));
   app.use('/api/auth', authRouter);
 
   const PORT = process.env.PORT || 5000;
 
   // User's Exact VirtualEnv Python Executable & Script Path
-  const venvPythonPath = path.join(__dirname, '..', 'AI-VIRTUAL-MOUSE', '.venv', 'Scripts', 'python.exe');
-  const ultimateScriptPath = path.join(__dirname, '..', 'AI-VIRTUAL-MOUSE', 'ultimate_gesture_control.py');
-  const fallbackBridgePath = path.join(__dirname, '..', 'AI-VIRTUAL-MOUSE', 'ai_engine_bridge.py');
+  const venvPythonPath = path.join(__dirname, '..', '..', 'AI-VIRTUAL-MOUSE', '.venv', 'Scripts', 'python.exe');
+  const ultimateScriptPath = path.join(__dirname, '..', '..', 'AI-VIRTUAL-MOUSE', 'ultimate_gesture_control.py');
+  const fallbackBridgePath = path.join(__dirname, '..', '..', 'AI-VIRTUAL-MOUSE', 'ai_engine_bridge.py');
 
   let pythonProcess = null;
   let engineRunning = false;
@@ -139,7 +140,7 @@ async function main() {
 
     try {
       pythonProcess = spawn(pythonCmd, ['-u', scriptPath], {
-        cwd: path.join(__dirname, '..', 'AI-VIRTUAL-MOUSE'),
+        cwd: path.join(__dirname, '..', '..', 'AI-VIRTUAL-MOUSE'),
         env: {
           ...process.env,
           // No OS window: stream the processed camera frame to the web HUD
@@ -180,6 +181,18 @@ async function main() {
 
       pythonProcess.on('close', (code) => {
         console.log(`[Python Engine Process] Exited with code ${code}.`);
+        pythonProcess = null;
+        engineRunning = false;
+        latestTelemetry.engineActive = false;
+        io.emit('ai-frame', { ...latestTelemetry, engineActive: false });
+        io.emit('engine-status', { active: false });
+      });
+
+      // Without this handler, a spawn failure (e.g. bad path, missing
+      // interpreter) emits an unhandled 'error' event that crashes the
+      // entire Express process instead of just failing to start the engine.
+      pythonProcess.on('error', (err) => {
+        console.error('Failed to spawn Python process:', err);
         pythonProcess = null;
         engineRunning = false;
         latestTelemetry.engineActive = false;
@@ -255,6 +268,34 @@ async function main() {
     const { mode } = req.body;
     io.emit('mode-change', { mode });
     res.json({ success: true, mode });
+  });
+
+  // --- Built-in assistant's learned knowledge ---
+  // The dashboard's chat orb pattern-matches locally, but any question it
+  // doesn't know gets offered back to the user as "teach: <answer>" — saved
+  // here and broadcast to every connected client so the whole dashboard
+  // "learns" it immediately, not just the browser tab that taught it.
+  app.get('/api/assistant/knowledge', requireAuth, async (req, res) => {
+    try {
+      const entries = await db.getLearnedKnowledge();
+      res.json({ success: true, entries });
+    } catch (err) {
+      res.status(500).json({ success: false, message: 'Failed to load learned knowledge' });
+    }
+  });
+
+  app.post('/api/assistant/knowledge', requireAuth, async (req, res) => {
+    try {
+      const { question, answer } = req.body || {};
+      if (!question || !question.trim() || !answer || !answer.trim()) {
+        return res.status(400).json({ success: false, message: 'Both a question and an answer are required' });
+      }
+      const entry = await db.addLearnedKnowledge({ question: question.trim(), answer: answer.trim(), userId: req.user.id });
+      io.emit('assistant-knowledge-added', entry);
+      res.json({ success: true, entry });
+    } catch (err) {
+      res.status(500).json({ success: false, message: 'Failed to save that' });
+    }
   });
 
   // --- Phone camera session endpoints ---

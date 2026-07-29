@@ -19,6 +19,11 @@
   <!-- Socket.io client CDN — talks to the real backend/server.js engine -->
   <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"></script>
 
+  <!-- Built-in assistant's static Q&A about AI-GOS itself (see getAssistantReply
+       in the script below) — a plain global script, loaded before the Babel-parsed
+       one so PROJECT_KNOWLEDGE_BASE is just available as a global by the time it's used. -->
+  <script src="assistant-knowledge.js"></script>
+
   <style>
     :root {
       --bg-dark: #070812;
@@ -245,6 +250,27 @@
       100% { transform: scale(0.9); opacity: 0.7; }
     }
 
+    /* Demo preview hand — a hand held up and gently turning/hovering in
+       space, not a rigid image bobbing up and down. Perspective + rotateX/Y
+       give the tilt actual depth, uneven keyframe spacing (11%, 34%...)
+       avoids the metronome feel a plain 0/25/50/75 split would have, and the
+       small scale drift reads as the wrist shifting distance from camera. */
+    @keyframes hand-float {
+      0%   { transform: perspective(700px) rotateX(2deg)  rotateY(-4deg) rotateZ(-2deg) translate(0px, 0px)   scale(1); }
+      11%  { transform: perspective(700px) rotateX(-1deg) rotateY(2deg)  rotateZ(-1deg) translate(3px, -6px)  scale(1.008); }
+      27%  { transform: perspective(700px) rotateX(-3deg) rotateY(6deg)  rotateZ(1deg)  translate(-2px, -11px) scale(1.015); }
+      42%  { transform: perspective(700px) rotateX(1deg)  rotateY(-2deg) rotateZ(2deg)  translate(4px, -5px)  scale(1.005); }
+      58%  { transform: perspective(700px) rotateX(-2deg) rotateY(-6deg) rotateZ(-1deg) translate(-4px, -13px) scale(1.018); }
+      74%  { transform: perspective(700px) rotateX(2deg)  rotateY(3deg)  rotateZ(1deg)  translate(2px, -7px)  scale(1.01); }
+      89%  { transform: perspective(700px) rotateX(-1deg) rotateY(-1deg) rotateZ(-2deg) translate(-2px, -2px) scale(1.003); }
+      100% { transform: perspective(700px) rotateX(2deg)  rotateY(-4deg) rotateZ(-2deg) translate(0px, 0px)   scale(1); }
+    }
+    .demo-hand-img {
+      animation: hand-float 7s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+      transform-origin: 50% 88%;
+      will-change: transform;
+    }
+
     /* Range Sliders & Toggles */
     .custom-range {
       -webkit-appearance: none;
@@ -378,6 +404,10 @@
     // dance needed the way the old ai-gos-hud (Vite dev server on a
     // different port) required.
     const AUTH_OPTS = { credentials: 'include' };
+    // Returned verbatim by getAssistantReply() when nothing matched, and
+    // compared by reference (===) in sendChatMessage to know when to offer
+    // the "teach: <answer>" flow instead of just displaying a dead end.
+    const ASSISTANT_FALLBACK_REPLY = 'Not sure about that one yet — reply with "teach: <answer>" and I\'ll remember it from now on, or try "help".';
     const socket = io({ autoConnect: false, reconnection: true, withCredentials: true });
 
     // Browser-side speech recognition (Chrome/Edge). Calling .start() on
@@ -655,14 +685,6 @@
         let animId;
         let t = 0;
 
-        const baseLandmarks = [
-          { x: 0, y: 120 }, { x: -30, y: 90 }, { x: -55, y: 55 }, { x: -75, y: 25 }, { x: -90, y: 0 },
-          { x: -30, y: -20 }, { x: -35, y: -65 }, { x: -38, y: -100 }, { x: -40, y: -130 },
-          { x: 0, y: -25 }, { x: 0, y: -75 }, { x: 0, y: -115 }, { x: 0, y: -145 },
-          { x: 30, y: -20 }, { x: 35, y: -65 }, { x: 38, y: -100 }, { x: 40, y: -128 },
-          { x: 55, y: -10 }, { x: 65, y: -45 }, { x: 72, y: -75 }, { x: 78, y: -100 }
-        ];
-
         const render = () => {
           t += 0.05;
           const cw = canvas.width;
@@ -683,12 +705,16 @@
           const liveTelemetry = telemetryRef.current;
           const isLive = engineActiveRef.current && liveTelemetry && Array.isArray(liveTelemetry.landmarks) && liveTelemetry.landmarks.length >= 21;
 
-          const cx = isLive ? 0 : cw * 0.55 + Math.sin(t * 0.8) * 15;
-          const cy = isLive ? 0 : ch * 0.5 + Math.cos(t * 0.6) * 10;
+          // Before the engine is live, tracking-hand.png (rendered behind this
+          // canvas) already has its own tracking-point overlay baked in — no
+          // simulated skeleton to draw on top of it.
+          if (!isLive) {
+            animId = requestAnimationFrame(render);
+            return;
+          }
 
-          const landmarks = isLive
-            ? liveTelemetry.landmarks.map((lm) => ({ x: lm.x * cw, y: lm.y * ch }))
-            : baseLandmarks.map((lm) => ({ x: cx + lm.x, y: cy + lm.y }));
+          const landmarks = liveTelemetry.landmarks.map((lm) => ({ x: lm.x * cw, y: lm.y * ch }));
+          const gestureLabel = `${liveTelemetry.gesture || 'IDLE'} [${Math.round(liveTelemetry.confidence || 0)}%]`;
 
           landmarks.forEach((lm, idx) => {
             ctx.beginPath();
@@ -704,9 +730,8 @@
             ctx.fill();
           });
 
-          const gestureLabel = isLive ? `${liveTelemetry.gesture || 'IDLE'} [${Math.round(liveTelemetry.confidence || 0)}%]` : 'OPEN PALM [98%]';
           const tagX = landmarks[0].x - 70;
-          const tagY = landmarks[9] ? landmarks[9].y - 90 : cy - 188;
+          const tagY = landmarks[9].y - 90;
           ctx.fillStyle = 'rgba(13, 15, 31, 0.85)';
           ctx.fillRect(tagX, tagY, 160, 22);
           ctx.fillStyle = '#00f2fe';
@@ -727,7 +752,11 @@
           {useWebcam && !isLiveFeed ? (
             <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} muted />
           ) : (
-            !isLiveFeed && <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 40%, #131633 0%, #050611 100%)' }}></div>
+            !isLiveFeed && (
+              <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 50% 40%, #131633 0%, #050611 100%)' }}>
+                <img src="/tracking-hand.png" alt="Hand tracking demo preview" className="demo-hand-img" style={{ width: '100%', height: '100%', objectFit: 'contain', opacity: 0.9 }} />
+              </div>
+            )
           )}
 
           <canvas ref={canvasRef} width={650} height={400} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', pointerEvents: 'none' }} />
@@ -759,6 +788,17 @@
       const [mode, setMode] = useState('Mouse Control');
       const [typedText, setTypedText] = useState('');
       const [isOrbOpen, setIsOrbOpen] = useState(false);
+      const [chatMessages, setChatMessages] = useState([
+        { role: 'assistant', text: "Hi, I'm the AI-GOS assistant. Ask about your gesture/FPS status, say things like \"start engine\" or \"open keyboard\", ask me about the project itself, or teach me anything I don't know yet — try \"help\"." }
+      ]);
+      const [chatInput, setChatInput] = useState('');
+      const chatScrollRef = useRef(null);
+      // Q&A other users have taught the assistant (see the "teach:" flow
+      // below) — loaded once on login and then kept live via the
+      // 'assistant-knowledge-added' socket broadcast, so a teach from any
+      // connected dashboard shows up here in real time without a refresh.
+      const [learnedKnowledge, setLearnedKnowledge] = useState([]);
+      const [pendingTeach, setPendingTeach] = useState(null);
       const [showQrModal, setShowQrModal] = useState(false);
       const [adminPanelOpen, setAdminPanelOpen] = useState(false);
 
@@ -864,6 +904,10 @@
         };
         const handleEngineStatus = ({ active }) => setIsEngineRunning(active);
         const handlePhoneStatus = ({ connected }) => setPhoneConnected(!!connected);
+        // Someone (any logged-in user, any tab) just taught the assistant a
+        // new answer — pick it up immediately rather than waiting for a
+        // page refresh to re-fetch /api/assistant/knowledge.
+        const handleKnowledgeAdded = (entry) => setLearnedKnowledge((prev) => [...prev, entry]);
 
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
@@ -871,6 +915,7 @@
         socket.on('ai-frame', handleFrame);
         socket.on('engine-status', handleEngineStatus);
         socket.on('phone-status', handlePhoneStatus);
+        socket.on('assistant-knowledge-added', handleKnowledgeAdded);
 
         return () => {
           socket.off('connect', handleConnect);
@@ -879,8 +924,19 @@
           socket.off('ai-frame', handleFrame);
           socket.off('engine-status', handleEngineStatus);
           socket.off('phone-status', handlePhoneStatus);
+          socket.off('assistant-knowledge-added', handleKnowledgeAdded);
         };
       }, []);
+
+      // Load whatever's already been taught so far as soon as we're logged
+      // in (the socket only delivers knowledge taught *after* this point).
+      useEffect(() => {
+        if (!user) return;
+        fetch('/api/assistant/knowledge', AUTH_OPTS)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => { if (data && data.success) setLearnedKnowledge(data.entries || []); })
+          .catch(() => {});
+      }, [user]);
 
       const handleLogout = useCallback(async () => {
         try { await fetch('/api/auth/logout', { method: 'POST', ...AUTH_OPTS }); } catch (err) { /* clear local state below regardless */ }
@@ -986,6 +1042,168 @@
         }
       };
       const openQrModal = () => requireLogin(doOpenQrModal);
+
+      // Built-in AI-GOS assistant: no external API/key, just pattern-matches
+      // the typed message against known intents and answers from live
+      // engine/telemetry state, triggering the same actions the dashboard
+      // buttons do where relevant.
+      const getAssistantReply = useCallback((raw) => {
+        const lower = raw.trim().toLowerCase();
+        if (!lower) return null;
+
+        // Only a bare greeting short-circuits — "hey how does this work" has
+        // real content after "hey" and should fall through to the knowledge
+        // base below instead of being swallowed by the greeting reply.
+        if (/^(hi|hello|hey|yo)[\s!.,]*$/.test(lower)) {
+          return 'Hey! Ask me about your gesture/FPS status, or say things like "start engine", "open keyboard", "start listening", or "help".';
+        }
+        if (lower.includes('who are you') || lower.includes('what are you')) {
+          return "I'm the built-in AI-GOS assistant — I report live engine status and can trigger a few dashboard actions for you, no external AI service involved.";
+        }
+        if (lower.includes('thank')) {
+          return "You're welcome!";
+        }
+        if (lower.includes('help') || lower.includes('what can you do') || lower.includes('commands')) {
+          return 'Try: "status", "what gesture", "start engine" / "stop engine", "open keyboard", "clear keyboard", "start listening" / "stop listening", "connect phone", "go to dashboard/analytics/keyboard/settings", ask me things like "what is this project" or "how does the keyboard work", or teach me something new by asking anything I don\'t know yet.';
+        }
+
+        // Answers other users have taught the assistant (see the "teach:"
+        // flow in sendChatMessage) — checked ahead of the static knowledge
+        // base below so a taught answer can also correct/extend a built-in
+        // one for the same question.
+        const learned = learnedKnowledge.find((entry) => {
+          const q = entry.question.toLowerCase();
+          return lower.includes(q) || q.includes(lower);
+        });
+        if (learned) return learned.answer;
+
+        // Project knowledge base (~90 entries, module-level PROJECT_KNOWLEDGE_BASE)
+        // — checked before the action-triggering branches below so a genuine
+        // question ("how does the keyboard work") never gets misread as a
+        // command ("open keyboard").
+        for (const entry of PROJECT_KNOWLEDGE_BASE) {
+          if (entry.keywords.some((kw) => lower.includes(kw))) return entry.answer;
+        }
+        // Catch-all for open-ended phrasing ("how this working", "how's this
+        // project put together", etc.) too generic for any specific entry
+        // above, checked last so it never preempts a more specific match.
+        if ((lower.includes('how') || lower.includes('what')) &&
+            (lower.includes('work') || lower.includes('project') || lower.includes('ai-gos') ||
+             lower.includes('this app') || lower.includes('this thing') || lower.includes('built'))) {
+          return "AI-GOS is a touchless, webcam-driven computer control system: move your hand in front of a camera to move the real OS cursor, click, scroll, control volume, switch windows, type, and dictate by voice. Under the hood it's three programs — a Python engine (OpenCV + MediaPipe) that does the actual gesture recognition and drives the OS, a Node.js/Express + Socket.io backend that starts/stops it and relays telemetry, and this React dashboard, which only visualizes and sends commands. Ask me about specific parts too — \"what gestures\", \"how does the keyboard work\", \"how does voice typing work\", or \"how does the phone camera work\".";
+        }
+
+        // Tab navigation — only on an explicit "go to"/"switch to" so plain
+        // "open keyboard" below still means the engine's keyboard overlay.
+        if (lower.includes('go to') || lower.includes('switch to')) {
+          if (lower.includes('dashboard')) { setActiveTab('dashboard'); return 'Switched to the Dashboard.'; }
+          if (lower.includes('analytic')) { setActiveTab('analytics'); return 'Switched to Gesture Analytics.'; }
+          if (lower.includes('keyboard')) { setActiveTab('keyboard'); return 'Switched to Virtual Keyboard & Voice AI.'; }
+          if (lower.includes('setting')) { setActiveTab('settings'); return 'Switched to Phone & Settings.'; }
+          if (lower.includes('landing') || lower.includes('home')) { setActiveTab('landing'); return 'Switched to the Landing page.'; }
+        }
+
+        if (lower.includes('fps') || lower.includes('latency') || lower.includes('status') || lower.includes('how fast')) {
+          if (!isEngineRunning) return 'The engine isn\'t running yet — say "start engine" to begin tracking.';
+          return `Tracking at ${Math.round((telemetry && telemetry.fps) || 0)} FPS, ${latency}ms latency, gesture: ${gesture} (${confidence}% confidence), mode: ${action}.`;
+        }
+        if (lower.includes('gesture')) {
+          if (!isEngineRunning) return 'The engine isn\'t running yet, so there\'s no gesture to report — say "start engine" first.';
+          return `Current gesture: ${gesture} at ${confidence}% confidence.`;
+        }
+
+        if (lower.includes('stop engine') || lower.includes('turn off') || lower.includes('halt')) {
+          if (!isEngineRunning) return 'The engine is already stopped.';
+          handleToggleEngine();
+          return 'Stopping the engine now.';
+        }
+        if (lower.includes('start engine') || lower.includes('turn on') || lower.includes('begin tracking')) {
+          if (isEngineRunning) return 'The engine is already running.';
+          handleToggleEngine();
+          return 'Starting the engine now — allow camera access if your browser asks.';
+        }
+
+        if (lower.includes('keyboard')) {
+          if (!isEngineRunning) return 'Start the engine first, then I can open the keyboard for you.';
+          if (lower.includes('clear')) {
+            handleEngineCommand('CLEAR');
+            return 'Cleared the keyboard buffer.';
+          }
+          handleEngineCommand('TOGGLE_KEYBOARD');
+          return 'Toggled the AI-GOS keyboard overlay.';
+        }
+        if (lower.includes('clear')) {
+          if (!isEngineRunning) return 'Start the engine first.';
+          handleEngineCommand('CLEAR');
+          return 'Cleared the keyboard buffer.';
+        }
+
+        if (lower.includes('listen') || lower.includes('voice')) {
+          if (!isEngineRunning) return 'Start the engine first, then I can toggle voice typing.';
+          const wasEnabled = voiceEnabled;
+          handleToggleListening();
+          return wasEnabled ? 'Stopping voice listening.' : 'Starting voice listening — go ahead and speak.';
+        }
+
+        if (lower.includes('phone') || lower.includes('qr')) {
+          openQrModal();
+          setIsOrbOpen(false);
+          return 'Opening the phone-pairing QR code.';
+        }
+
+        return ASSISTANT_FALLBACK_REPLY;
+      }, [isEngineRunning, telemetry, gesture, confidence, latency, action, voiceEnabled, learnedKnowledge,
+          handleToggleEngine, handleEngineCommand, handleToggleListening, openQrModal]);
+
+      // Saves a taught answer for everyone (requires login, like every other
+      // write) — the backend broadcasts it back over the socket, which is
+      // what actually lands it in learnedKnowledge (including for this tab).
+      const doTeach = useCallback(async (question, answer) => {
+        try {
+          const res = await fetch('/api/assistant/knowledge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            ...AUTH_OPTS,
+            body: JSON.stringify({ question, answer })
+          });
+          if (!res.ok) throw new Error('Backend rejected the answer');
+          setChatMessages((prev) => [...prev, { role: 'assistant', text: "Got it — I'll remember that from now on." }]);
+        } catch (err) {
+          setChatMessages((prev) => [...prev, { role: 'assistant', text: "Couldn't save that just now — is the backend running?" }]);
+        }
+      }, []);
+
+      const sendChatMessage = useCallback(() => {
+        const text = chatInput.trim();
+        if (!text) return;
+        setChatInput('');
+
+        // A reply to the assistant's own "teach: <answer>" prompt — save it
+        // instead of treating it as a new question.
+        const teachMatch = pendingTeach && /^teach:\s*(.+)/i.exec(text);
+        if (teachMatch) {
+          const answer = teachMatch[1].trim();
+          const question = pendingTeach;
+          setPendingTeach(null);
+          setChatMessages((prev) => [...prev, { role: 'user', text }]);
+          requireLogin(() => doTeach(question, answer));
+          return;
+        }
+
+        const reply = getAssistantReply(text);
+        setChatMessages((prev) => [
+          ...prev,
+          { role: 'user', text },
+          ...(reply ? [{ role: 'assistant', text: reply }] : [])
+        ]);
+        setPendingTeach(reply === ASSISTANT_FALLBACK_REPLY ? text : null);
+      }, [chatInput, getAssistantReply, pendingTeach, requireLogin, doTeach]);
+
+      useEffect(() => {
+        if (chatScrollRef.current) {
+          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
+        }
+      }, [chatMessages, isOrbOpen]);
 
       const handleDisconnectPhone = useCallback(() => {
         if (!window.confirm('Disconnect the paired phone camera? The engine will fall back to the PC webcam.')) return;
@@ -1380,7 +1598,7 @@
                     <div>
                       <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Camera Source</label>
                       <div style={{ width: '100%', padding: '0.6rem', background: '#000', color: '#fff', borderRadius: '8px', border: '1px solid var(--border-color)', marginTop: '0.3rem', fontSize: '0.85rem' }}>
-                        {phoneConnected ? 'Phone Camera (WebRTC) — used automatically while connected' : 'PC Webcam — connect a phone above to switch to it automatically'}
+                        {phoneConnected ? 'Phone Camera (HTTPS JPEG stream) — used automatically while connected' : 'PC Webcam — connect a phone above to switch to it automatically'}
                       </div>
                     </div>
                     <div>
@@ -1404,8 +1622,36 @@
                 <strong>AI-GOS Assistant</strong>
                 <button onClick={() => setIsOrbOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
               </div>
-              <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.8rem' }}>{aiResponse}</p>
-              <input type="text" placeholder="Ask AI-GOS..." style={{ width: '100%', padding: '0.5rem', background: '#000', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '8px' }} />
+              <div ref={chatScrollRef} style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.8rem', paddingRight: '0.2rem' }}>
+                {chatMessages.map((msg, index) => (
+                  <div
+                    key={index}
+                    style={{
+                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
+                      maxWidth: '85%',
+                      padding: '0.5rem 0.7rem',
+                      borderRadius: '10px',
+                      fontSize: '0.82rem',
+                      lineHeight: 1.4,
+                      background: msg.role === 'user' ? 'var(--gradient-main)' : 'rgba(255, 255, 255, 0.06)',
+                      color: msg.role === 'user' ? '#fff' : 'var(--text-muted)'
+                    }}
+                  >
+                    {msg.text}
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
+                  placeholder="Ask AI-GOS..."
+                  style={{ flex: 1, padding: '0.5rem', background: '#000', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '8px' }}
+                />
+                <button className="btn-primary" onClick={sendChatMessage} style={{ padding: '0.5rem 0.9rem' }}>Send</button>
+              </div>
             </div>
           )}
 

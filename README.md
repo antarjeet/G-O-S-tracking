@@ -33,7 +33,9 @@ or sign up, then use Start Engine / Connect Phone Camera as normal.
 - **04 Virtual Keyboard & Voice AI**: Live air-typed text and voice status once
   the engine is running (manual on-screen keyboard as a demo when it's not),
   plus real engine command buttons (K/H/G/M/P/T/V/C).
-- **05 Phone Camera & Settings**: Real WebRTC phone pairing via QR code, live
+- **05 Phone Camera & Settings**: Real phone pairing via QR code (the phone
+  streams JPEG frames to the backend over HTTPS, not a WebRTC peer
+  connection), live
   connection status, and camera source display.
 - **Floating AI Assistant Orb**: Bottom-left status drawer accessible across
   all views.
