@@ -4,6 +4,10 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI-GOS | Next Generation AI Operating System</title>
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/favicon-512.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/favicon-180.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -18,11 +22,6 @@
 
   <!-- Socket.io client CDN — talks to the real backend/server.js engine -->
   <script src="https://cdn.jsdelivr.net/npm/socket.io-client@4/dist/socket.io.min.js"></script>
-
-  <!-- Built-in assistant's static Q&A about AI-GOS itself (see getAssistantReply
-       in the script below) — a plain global script, loaded before the Babel-parsed
-       one so PROJECT_KNOWLEDGE_BASE is just available as a global by the time it's used. -->
-  <script src="assistant-knowledge.js"></script>
 
   <style>
     :root {
@@ -309,26 +308,6 @@
     input:checked + .toggle-slider { background: var(--gradient-main); border-color: var(--primary); }
     input:checked + .toggle-slider:before { transform: translateX(20px); }
 
-    /* Floating AI Orb */
-    .ai-orb-button {
-      position: fixed; bottom: 2rem; left: 2rem;
-      width: 56px; height: 56px; border-radius: 50%;
-      background: var(--gradient-main);
-      border: 2px solid rgba(255, 255, 255, 0.3);
-      color: white; display: flex; align-items: center; justify-content: center;
-      cursor: pointer; box-shadow: var(--shadow-glow); z-index: 999;
-      transition: all 0.3s ease;
-    }
-    .ai-orb-button:hover { transform: scale(1.1); box-shadow: 0 0 35px rgba(0, 242, 254, 0.6); }
-
-    .ai-drawer {
-      position: fixed; bottom: 6rem; left: 2rem;
-      width: 350px; background: rgba(13, 15, 31, 0.95);
-      backdrop-filter: blur(20px); border: 1px solid var(--border-glow);
-      border-radius: 20px; padding: 1.2rem;
-      box-shadow: 0 15px 40px rgba(0, 0, 0, 0.6); z-index: 998;
-    }
-
     /* Waveform Animation */
     .waveform-container { display: flex; align-items: center; justify-content: center; gap: 4px; height: 44px; }
     .wave-bar {
@@ -404,10 +383,6 @@
     // dance needed the way the old ai-gos-hud (Vite dev server on a
     // different port) required.
     const AUTH_OPTS = { credentials: 'include' };
-    // Returned verbatim by getAssistantReply() when nothing matched, and
-    // compared by reference (===) in sendChatMessage to know when to offer
-    // the "teach: <answer>" flow instead of just displaying a dead end.
-    const ASSISTANT_FALLBACK_REPLY = 'Not sure about that one yet — reply with "teach: <answer>" and I\'ll remember it from now on, or try "help".';
     const socket = io({ autoConnect: false, reconnection: true, withCredentials: true });
 
     // Browser-side speech recognition (Chrome/Edge). Calling .start() on
@@ -420,16 +395,16 @@
     const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
 
     // Mirrors the command set ultimate_gesture_control.py listens for on
-    // stdin (see _stdin_command_reader / the K/H/G/M/P/T/V/C handlers).
+    // stdin (see _stdin_command_reader / the H/G/M/P/T/V/C handlers).
     const ENGINE_COMMANDS = [
-      { cmd: 'TOGGLE_KEYBOARD', label: '⌨️ Keyboard', title: 'Toggle AI-GOS keyboard (K)' },
       { cmd: 'SWAP_HAND', label: '🤚 Swap Hand', title: 'Swap primary hand (H)' },
       { cmd: 'TOGGLE_AI_GOS', label: '🧠 AI-GOS Layer', title: 'Toggle AI-GOS layer (G)' },
       { cmd: 'CYCLE_CONTEXT', label: '🗂️ Context', title: 'Cycle context: General/Browser/Coding/Media (M)' },
       { cmd: 'CYCLE_PROFILE', label: '🎚️ Profile', title: 'Cycle profile: Default/Accessible (P)' },
       { cmd: 'TRAIN', label: '🎓 Train', title: 'Train current pose as custom gesture (T)' },
       { cmd: 'TOGGLE_VOICE', label: '🎙️ Voice', title: 'Toggle voice input (V)' },
-      { cmd: 'CLEAR', label: '🧹 Clear', title: 'Clear AI-GOS keyboard text (C)' }
+      { cmd: 'CLEAR', label: '🧹 Clear', title: 'Clear dictated text (C)' },
+      { cmd: 'SUMMARIZE_SCREEN', label: '🖥️ Summarize Screen', title: 'OCR + window scan of the current screen (S)' }
     ];
 
     // --- Auth Gate (login / signup against backend/auth.js) ---
@@ -786,19 +761,7 @@
     const App = () => {
       const [activeTab, setActiveTab] = useState('landing');
       const [mode, setMode] = useState('Mouse Control');
-      const [typedText, setTypedText] = useState('');
-      const [isOrbOpen, setIsOrbOpen] = useState(false);
-      const [chatMessages, setChatMessages] = useState([
-        { role: 'assistant', text: "Hi, I'm the AI-GOS assistant. Ask about your gesture/FPS status, say things like \"start engine\" or \"open keyboard\", ask me about the project itself, or teach me anything I don't know yet — try \"help\"." }
-      ]);
-      const [chatInput, setChatInput] = useState('');
-      const chatScrollRef = useRef(null);
-      // Q&A other users have taught the assistant (see the "teach:" flow
-      // below) — loaded once on login and then kept live via the
-      // 'assistant-knowledge-added' socket broadcast, so a teach from any
-      // connected dashboard shows up here in real time without a refresh.
-      const [learnedKnowledge, setLearnedKnowledge] = useState([]);
-      const [pendingTeach, setPendingTeach] = useState(null);
+      const [jarvisInput, setJarvisInput] = useState('');
       const [showQrModal, setShowQrModal] = useState(false);
       const [adminPanelOpen, setAdminPanelOpen] = useState(false);
 
@@ -843,7 +806,7 @@
 
       const gesture = isEngineRunning && telemetry ? (telemetry.gesture || 'IDLE') : 'Open Palm';
       const confidence = isEngineRunning && telemetry ? Math.round(telemetry.confidence || 0) : 98;
-      const action = isEngineRunning ? (telemetry && telemetry.keyboard && telemetry.keyboard.active ? 'Air Typing' : 'Live Tracking') : 'Move Cursor';
+      const action = isEngineRunning ? 'Live Tracking' : 'Move Cursor';
       const latency = isEngineRunning && telemetry ? Math.round(telemetry.latency || 0) : 18;
       const aiResponse = isEngineRunning
         ? `Engine is live — tracking "${gesture}" at ${confidence}% confidence.`
@@ -904,10 +867,6 @@
         };
         const handleEngineStatus = ({ active }) => setIsEngineRunning(active);
         const handlePhoneStatus = ({ connected }) => setPhoneConnected(!!connected);
-        // Someone (any logged-in user, any tab) just taught the assistant a
-        // new answer — pick it up immediately rather than waiting for a
-        // page refresh to re-fetch /api/assistant/knowledge.
-        const handleKnowledgeAdded = (entry) => setLearnedKnowledge((prev) => [...prev, entry]);
 
         socket.on('connect', handleConnect);
         socket.on('disconnect', handleDisconnect);
@@ -915,7 +874,6 @@
         socket.on('ai-frame', handleFrame);
         socket.on('engine-status', handleEngineStatus);
         socket.on('phone-status', handlePhoneStatus);
-        socket.on('assistant-knowledge-added', handleKnowledgeAdded);
 
         return () => {
           socket.off('connect', handleConnect);
@@ -924,19 +882,8 @@
           socket.off('ai-frame', handleFrame);
           socket.off('engine-status', handleEngineStatus);
           socket.off('phone-status', handlePhoneStatus);
-          socket.off('assistant-knowledge-added', handleKnowledgeAdded);
         };
       }, []);
-
-      // Load whatever's already been taught so far as soon as we're logged
-      // in (the socket only delivers knowledge taught *after* this point).
-      useEffect(() => {
-        if (!user) return;
-        fetch('/api/assistant/knowledge', AUTH_OPTS)
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => { if (data && data.success) setLearnedKnowledge(data.entries || []); })
-          .catch(() => {});
-      }, [user]);
 
       const handleLogout = useCallback(async () => {
         try { await fetch('/api/auth/logout', { method: 'POST', ...AUTH_OPTS }); } catch (err) { /* clear local state below regardless */ }
@@ -1043,168 +990,6 @@
       };
       const openQrModal = () => requireLogin(doOpenQrModal);
 
-      // Built-in AI-GOS assistant: no external API/key, just pattern-matches
-      // the typed message against known intents and answers from live
-      // engine/telemetry state, triggering the same actions the dashboard
-      // buttons do where relevant.
-      const getAssistantReply = useCallback((raw) => {
-        const lower = raw.trim().toLowerCase();
-        if (!lower) return null;
-
-        // Only a bare greeting short-circuits — "hey how does this work" has
-        // real content after "hey" and should fall through to the knowledge
-        // base below instead of being swallowed by the greeting reply.
-        if (/^(hi|hello|hey|yo)[\s!.,]*$/.test(lower)) {
-          return 'Hey! Ask me about your gesture/FPS status, or say things like "start engine", "open keyboard", "start listening", or "help".';
-        }
-        if (lower.includes('who are you') || lower.includes('what are you')) {
-          return "I'm the built-in AI-GOS assistant — I report live engine status and can trigger a few dashboard actions for you, no external AI service involved.";
-        }
-        if (lower.includes('thank')) {
-          return "You're welcome!";
-        }
-        if (lower.includes('help') || lower.includes('what can you do') || lower.includes('commands')) {
-          return 'Try: "status", "what gesture", "start engine" / "stop engine", "open keyboard", "clear keyboard", "start listening" / "stop listening", "connect phone", "go to dashboard/analytics/keyboard/settings", ask me things like "what is this project" or "how does the keyboard work", or teach me something new by asking anything I don\'t know yet.';
-        }
-
-        // Answers other users have taught the assistant (see the "teach:"
-        // flow in sendChatMessage) — checked ahead of the static knowledge
-        // base below so a taught answer can also correct/extend a built-in
-        // one for the same question.
-        const learned = learnedKnowledge.find((entry) => {
-          const q = entry.question.toLowerCase();
-          return lower.includes(q) || q.includes(lower);
-        });
-        if (learned) return learned.answer;
-
-        // Project knowledge base (~90 entries, module-level PROJECT_KNOWLEDGE_BASE)
-        // — checked before the action-triggering branches below so a genuine
-        // question ("how does the keyboard work") never gets misread as a
-        // command ("open keyboard").
-        for (const entry of PROJECT_KNOWLEDGE_BASE) {
-          if (entry.keywords.some((kw) => lower.includes(kw))) return entry.answer;
-        }
-        // Catch-all for open-ended phrasing ("how this working", "how's this
-        // project put together", etc.) too generic for any specific entry
-        // above, checked last so it never preempts a more specific match.
-        if ((lower.includes('how') || lower.includes('what')) &&
-            (lower.includes('work') || lower.includes('project') || lower.includes('ai-gos') ||
-             lower.includes('this app') || lower.includes('this thing') || lower.includes('built'))) {
-          return "AI-GOS is a touchless, webcam-driven computer control system: move your hand in front of a camera to move the real OS cursor, click, scroll, control volume, switch windows, type, and dictate by voice. Under the hood it's three programs — a Python engine (OpenCV + MediaPipe) that does the actual gesture recognition and drives the OS, a Node.js/Express + Socket.io backend that starts/stops it and relays telemetry, and this React dashboard, which only visualizes and sends commands. Ask me about specific parts too — \"what gestures\", \"how does the keyboard work\", \"how does voice typing work\", or \"how does the phone camera work\".";
-        }
-
-        // Tab navigation — only on an explicit "go to"/"switch to" so plain
-        // "open keyboard" below still means the engine's keyboard overlay.
-        if (lower.includes('go to') || lower.includes('switch to')) {
-          if (lower.includes('dashboard')) { setActiveTab('dashboard'); return 'Switched to the Dashboard.'; }
-          if (lower.includes('analytic')) { setActiveTab('analytics'); return 'Switched to Gesture Analytics.'; }
-          if (lower.includes('keyboard')) { setActiveTab('keyboard'); return 'Switched to Virtual Keyboard & Voice AI.'; }
-          if (lower.includes('setting')) { setActiveTab('settings'); return 'Switched to Phone & Settings.'; }
-          if (lower.includes('landing') || lower.includes('home')) { setActiveTab('landing'); return 'Switched to the Landing page.'; }
-        }
-
-        if (lower.includes('fps') || lower.includes('latency') || lower.includes('status') || lower.includes('how fast')) {
-          if (!isEngineRunning) return 'The engine isn\'t running yet — say "start engine" to begin tracking.';
-          return `Tracking at ${Math.round((telemetry && telemetry.fps) || 0)} FPS, ${latency}ms latency, gesture: ${gesture} (${confidence}% confidence), mode: ${action}.`;
-        }
-        if (lower.includes('gesture')) {
-          if (!isEngineRunning) return 'The engine isn\'t running yet, so there\'s no gesture to report — say "start engine" first.';
-          return `Current gesture: ${gesture} at ${confidence}% confidence.`;
-        }
-
-        if (lower.includes('stop engine') || lower.includes('turn off') || lower.includes('halt')) {
-          if (!isEngineRunning) return 'The engine is already stopped.';
-          handleToggleEngine();
-          return 'Stopping the engine now.';
-        }
-        if (lower.includes('start engine') || lower.includes('turn on') || lower.includes('begin tracking')) {
-          if (isEngineRunning) return 'The engine is already running.';
-          handleToggleEngine();
-          return 'Starting the engine now — allow camera access if your browser asks.';
-        }
-
-        if (lower.includes('keyboard')) {
-          if (!isEngineRunning) return 'Start the engine first, then I can open the keyboard for you.';
-          if (lower.includes('clear')) {
-            handleEngineCommand('CLEAR');
-            return 'Cleared the keyboard buffer.';
-          }
-          handleEngineCommand('TOGGLE_KEYBOARD');
-          return 'Toggled the AI-GOS keyboard overlay.';
-        }
-        if (lower.includes('clear')) {
-          if (!isEngineRunning) return 'Start the engine first.';
-          handleEngineCommand('CLEAR');
-          return 'Cleared the keyboard buffer.';
-        }
-
-        if (lower.includes('listen') || lower.includes('voice')) {
-          if (!isEngineRunning) return 'Start the engine first, then I can toggle voice typing.';
-          const wasEnabled = voiceEnabled;
-          handleToggleListening();
-          return wasEnabled ? 'Stopping voice listening.' : 'Starting voice listening — go ahead and speak.';
-        }
-
-        if (lower.includes('phone') || lower.includes('qr')) {
-          openQrModal();
-          setIsOrbOpen(false);
-          return 'Opening the phone-pairing QR code.';
-        }
-
-        return ASSISTANT_FALLBACK_REPLY;
-      }, [isEngineRunning, telemetry, gesture, confidence, latency, action, voiceEnabled, learnedKnowledge,
-          handleToggleEngine, handleEngineCommand, handleToggleListening, openQrModal]);
-
-      // Saves a taught answer for everyone (requires login, like every other
-      // write) — the backend broadcasts it back over the socket, which is
-      // what actually lands it in learnedKnowledge (including for this tab).
-      const doTeach = useCallback(async (question, answer) => {
-        try {
-          const res = await fetch('/api/assistant/knowledge', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            ...AUTH_OPTS,
-            body: JSON.stringify({ question, answer })
-          });
-          if (!res.ok) throw new Error('Backend rejected the answer');
-          setChatMessages((prev) => [...prev, { role: 'assistant', text: "Got it — I'll remember that from now on." }]);
-        } catch (err) {
-          setChatMessages((prev) => [...prev, { role: 'assistant', text: "Couldn't save that just now — is the backend running?" }]);
-        }
-      }, []);
-
-      const sendChatMessage = useCallback(() => {
-        const text = chatInput.trim();
-        if (!text) return;
-        setChatInput('');
-
-        // A reply to the assistant's own "teach: <answer>" prompt — save it
-        // instead of treating it as a new question.
-        const teachMatch = pendingTeach && /^teach:\s*(.+)/i.exec(text);
-        if (teachMatch) {
-          const answer = teachMatch[1].trim();
-          const question = pendingTeach;
-          setPendingTeach(null);
-          setChatMessages((prev) => [...prev, { role: 'user', text }]);
-          requireLogin(() => doTeach(question, answer));
-          return;
-        }
-
-        const reply = getAssistantReply(text);
-        setChatMessages((prev) => [
-          ...prev,
-          { role: 'user', text },
-          ...(reply ? [{ role: 'assistant', text: reply }] : [])
-        ]);
-        setPendingTeach(reply === ASSISTANT_FALLBACK_REPLY ? text : null);
-      }, [chatInput, getAssistantReply, pendingTeach, requireLogin, doTeach]);
-
-      useEffect(() => {
-        if (chatScrollRef.current) {
-          chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
-        }
-      }, [chatMessages, isOrbOpen]);
-
       const handleDisconnectPhone = useCallback(() => {
         if (!window.confirm('Disconnect the paired phone camera? The engine will fall back to the PC webcam.')) return;
         fetch('/api/phone-session/disconnect', { method: 'POST', ...AUTH_OPTS })
@@ -1271,7 +1056,7 @@
                 { id: 'landing', label: '01 Landing Page' },
                 { id: 'dashboard', label: '02 Dashboard' },
                 { id: 'analytics', label: '03 Gesture Analytics' },
-                { id: 'keyboard', label: '04 Virtual Keyboard & Voice AI' },
+                { id: 'voice', label: '04 Voice AI' },
                 { id: 'settings', label: '05 Phone & Settings' }
               ].map(tab => (
                 <button
@@ -1341,7 +1126,6 @@
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
                   {[
                     { title: 'Real-time Gesture Control', desc: 'High accuracy 21-point hand tracking & recognition.', icon: '🖐️' },
-                    { title: 'Virtual Keyboard', desc: 'Type anything in the air with spatial position detection.', icon: '⌨️' },
                     { title: 'Voice Assistant', desc: 'AI voice control & hands-free machine commands.', icon: '🎙️' },
                     { title: 'Phone Camera', desc: 'Use your phone as a wireless HD webcam.', icon: '📱' }
                   ].map((f, i) => (
@@ -1471,42 +1255,9 @@
               </div>
             )}
 
-            {/* VIEW 04: VIRTUAL KEYBOARD & VOICE AI */}
-            {activeTab === 'keyboard' && (
+            {/* VIEW 04: VOICE AI */}
+            {activeTab === 'voice' && (
               <div>
-                <div className="glass-card" style={{ marginBottom: '1.5rem' }}>
-                  <div className="glass-card-header">
-                    <div className="card-title">⌨️ VIRTUAL AIR KEYBOARD</div>
-                  </div>
-                  <div style={{ background: 'rgba(0,0,0,0.5)', border: '1px solid var(--border-glow)', borderRadius: '12px', padding: '1rem 1.5rem', fontSize: '1.2rem', fontFamily: 'var(--font-mono)', minHeight: '60px', marginBottom: '1.5rem' }}>
-                    {isEngineRunning && telemetry && telemetry.keyboard ? (telemetry.keyboard.text || '') : typedText}
-                    <span className="badge-pulse-dot" style={{ display: 'inline-block', marginLeft: 4 }}></span>
-                  </div>
-
-                  {isEngineRunning ? (
-                    <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      Live air-typed text from the engine. Send <strong>TOGGLE_KEYBOARD</strong> below (K) to show/hide the AI-GOS keyboard overlay, or <strong>CLEAR</strong> (C) to clear it.
-                    </p>
-                  ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: '800px', margin: '0 auto' }}>
-                      {[['Q','W','E','R','T','Y','U','I','O','P'], ['A','S','D','F','G','H','J','K','L'], ['Z','X','C','V','B','N','M']].map((row, r) => (
-                        <div key={r} style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem' }}>
-                          {row.map(char => (
-                            <button key={char} onClick={() => setTypedText(prev => prev + char.toLowerCase())} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: '#fff', width: '50px', height: '46px', borderRadius: 8, fontSize: '1.1rem', cursor: 'pointer' }}>
-                              {char}
-                            </button>
-                          ))}
-                        </div>
-                      ))}
-                      <div style={{ display: 'flex', justifyContent: 'center', gap: '0.4rem', marginTop: '0.4rem' }}>
-                        <button onClick={() => setTypedText(prev => prev + ' ')} style={{ width: '300px', background: 'rgba(255,255,255,0.06)', border: '1px solid var(--border-color)', color: '#fff', borderRadius: 8, cursor: 'pointer' }}>Space</button>
-                        <button onClick={() => setTypedText('')} style={{ background: 'rgba(255,0,127,0.15)', color: 'var(--accent-pink)', border: '1px solid rgba(255,0,127,0.3)', padding: '0.6rem 1.2rem', borderRadius: 8, cursor: 'pointer' }}>Clear</button>
-                      </div>
-                      <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.78rem', marginTop: '0.4rem' }}>Manual demo keyboard — start the engine for real air-typing.</p>
-                    </div>
-                  )}
-                </div>
-
                 <div className="glass-card">
                   <div className="glass-card-header">
                     <div className="card-title">🎙️ VOICE AI ASSISTANT</div>
@@ -1551,7 +1302,9 @@
                   </p>
                   <p style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.78rem', marginBottom: '1rem' }}>
                     Click Start Listening (or send <strong>TOGGLE_VOICE</strong> below / press V), then just speak —
-                    it dictates straight into the keyboard buffer above. Say "space", "enter", "clear", or "delete" as commands.
+                    it dictates straight into whatever field has focus on your PC. Say "space", "enter", "clear", or "delete" as commands,
+                    ask "what's on my screen?" / "summarize screen" for a spoken-to-text screen summary, or say
+                    "Jarvis, ..." followed by anything at all to talk to the Claude-powered assistant below.
                   </p>
                   <div className="glass-card-header"><div className="card-title" style={{ fontSize: '0.9rem' }}>ENGINE CONTROLS</div></div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.6rem' }}>
@@ -1568,6 +1321,66 @@
                       </button>
                     ))}
                   </div>
+
+                  {isEngineRunning && telemetry && telemetry.screen && (
+                    <div style={{ marginTop: '1rem', background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-glow)', borderRadius: '12px', padding: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.85rem' }}>🖥️ Screen Understanding</strong>
+                        {!telemetry.screen.ocrAvailable && (
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>OCR unavailable</span>
+                        )}
+                      </div>
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        {telemetry.screen.status === 'analyzing'
+                          ? 'Analyzing screen…'
+                          : (telemetry.screen.summary || 'No screen summary yet — click "Summarize Screen" above.')}
+                      </p>
+                    </div>
+                  )}
+
+                  {isEngineRunning && telemetry && telemetry.jarvis && (
+                    <div style={{ marginTop: '1rem', background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-glow)', borderRadius: '12px', padding: '1rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.85rem' }}>🤖 Jarvis</strong>
+                        {!telemetry.jarvis.available && (
+                          <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>No API key configured</span>
+                        )}
+                      </div>
+                      {telemetry.jarvis.available && (
+                        <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '0.6rem' }}>
+                          <input
+                            type="text"
+                            value={jarvisInput}
+                            onChange={(e) => setJarvisInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && jarvisInput.trim()) {
+                                handleEngineCommand('ASK_JARVIS:' + jarvisInput.trim());
+                                setJarvisInput('');
+                              }
+                            }}
+                            placeholder='Ask Jarvis anything, or say "Jarvis, ..."'
+                            style={{ flex: 1, padding: '0.5rem', background: '#000', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '8px', fontSize: '0.8rem' }}
+                          />
+                          <button
+                            className="btn-primary"
+                            style={{ padding: '0.5rem 0.9rem', fontSize: '0.8rem' }}
+                            onClick={() => {
+                              if (!jarvisInput.trim()) return;
+                              handleEngineCommand('ASK_JARVIS:' + jarvisInput.trim());
+                              setJarvisInput('');
+                            }}
+                          >
+                            Ask
+                          </button>
+                        </div>
+                      )}
+                      <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>
+                        {telemetry.jarvis.status && telemetry.jarvis.status.startsWith('Jarvis thinking')
+                          ? telemetry.jarvis.status
+                          : (telemetry.jarvis.lastResponse || 'Nothing asked yet.')}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -1612,48 +1425,6 @@
             )}
 
           </main>
-
-          {/* Floating AI Orb Trigger */}
-          <button className="ai-orb-button" onClick={() => setIsOrbOpen(!isOrbOpen)}>🤖</button>
-
-          {isOrbOpen && (
-            <div className="ai-drawer">
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem' }}>
-                <strong>AI-GOS Assistant</strong>
-                <button onClick={() => setIsOrbOpen(false)} style={{ background: 'none', border: 'none', color: '#fff', cursor: 'pointer' }}>✕</button>
-              </div>
-              <div ref={chatScrollRef} style={{ maxHeight: '240px', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '0.8rem', paddingRight: '0.2rem' }}>
-                {chatMessages.map((msg, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start',
-                      maxWidth: '85%',
-                      padding: '0.5rem 0.7rem',
-                      borderRadius: '10px',
-                      fontSize: '0.82rem',
-                      lineHeight: 1.4,
-                      background: msg.role === 'user' ? 'var(--gradient-main)' : 'rgba(255, 255, 255, 0.06)',
-                      color: msg.role === 'user' ? '#fff' : 'var(--text-muted)'
-                    }}
-                  >
-                    {msg.text}
-                  </div>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: '0.4rem' }}>
-                <input
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter') sendChatMessage(); }}
-                  placeholder="Ask AI-GOS..."
-                  style={{ flex: 1, padding: '0.5rem', background: '#000', color: '#fff', border: '1px solid var(--border-color)', borderRadius: '8px' }}
-                />
-                <button className="btn-primary" onClick={sendChatMessage} style={{ padding: '0.5rem 0.9rem' }}>Send</button>
-              </div>
-            </div>
-          )}
 
           {/* QR Modal */}
           {showQrModal && (

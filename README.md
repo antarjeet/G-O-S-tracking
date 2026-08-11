@@ -30,15 +30,12 @@ or sign up, then use Start Engine / Connect Phone Camera as normal.
   performance gauges (real CPU/GPU once the engine is live).
 - **03 Gesture Analytics**: Chart.js time-series and distribution charts
   (static demo data — no analytics history endpoint yet).
-- **04 Virtual Keyboard & Voice AI**: Live air-typed text and voice status once
-  the engine is running (manual on-screen keyboard as a demo when it's not),
-  plus real engine command buttons (K/H/G/M/P/T/V/C).
+- **04 Voice AI**: Voice-dictation status and Claude-powered Jarvis assistant
+  once the engine is running, plus real engine command buttons (H/G/M/P/T/V/C).
 - **05 Phone Camera & Settings**: Real phone pairing via QR code (the phone
   streams JPEG frames to the backend over HTTPS, not a WebRTC peer
   connection), live
   connection status, and camera source display.
-- **Floating AI Assistant Orb**: Bottom-left status drawer accessible across
-  all views.
 - **Auth**: Log in / sign up against the backend's session-cookie auth, plus a
   lightweight admin user-management panel for admin accounts.
 

@@ -10,38 +10,16 @@ const cookieParser = require('cookie-parser');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const selfsigned = require('selfsigned');
 const QRCode = require('qrcode');
 const { router: authRouter, requireAuth, getUserFromToken, parseCookieHeader, COOKIE_NAME, ensureAdminFromEnv } = require('./auth');
 const db = require('./db');
-
-// --- Self-signed HTTPS certificate (cached to disk across restarts) ---
-// Phone camera capture (getUserMedia) requires a "secure context". Browsers
-// treat plain http:// as insecure for any host except literal localhost, and
-// the phone reaches this server over the LAN by IP, not localhost — so this
-// server must speak HTTPS. The certificate is self-signed (this is a local
-// dev tool, not a public service), which means both this PC's browser and
-// the phone's browser will show a one-time "not trusted" warning the first
-// time they visit; that's expected and safe to click through for a server
-// you're running yourself.
-const CERT_DIR = path.join(__dirname, 'certs');
-const CERT_PATH = path.join(CERT_DIR, 'cert.pem');
-const KEY_PATH = path.join(CERT_DIR, 'key.pem');
-
-async function getOrCreateCertificate() {
-  if (fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) {
-    return { cert: fs.readFileSync(CERT_PATH), key: fs.readFileSync(KEY_PATH) };
-  }
-  const pems = await selfsigned.generate([{ name: 'commonName', value: 'ai-gos.local' }], {
-    days: 3650,
-    keySize: 2048,
-    extensions: [{ name: 'basicConstraints', cA: true }]
-  });
-  fs.mkdirSync(CERT_DIR, { recursive: true });
-  fs.writeFileSync(CERT_PATH, pems.cert);
-  fs.writeFileSync(KEY_PATH, pems.private);
-  return { cert: pems.cert, key: pems.private };
-}
+// Phone camera capture (getUserMedia) requires a "secure context", and the
+// phone reaches this server over the LAN by IP (not localhost), so this
+// server must speak HTTPS. getOrCreateCertificate() auto-provisions a
+// trusted cert via mkcert when available (see certSetup.js) — every clone
+// of this repo generates and trusts its own on first run, with nothing
+// machine-specific ever committed to git (certs/ is gitignored).
+const { getOrCreateCertificate } = require('./certSetup');
 
 function getLanIp() {
   const interfaces = os.networkInterfaces();
@@ -250,7 +228,7 @@ async function main() {
     }
   });
 
-  // Relay a keyboard-shortcut-equivalent command (K/H/G/M/P/T/V/C) to the engine
+  // Relay a keyboard-shortcut-equivalent command (H/G/M/P/T/V/C) to the engine
   app.post('/api/engine/command', requireAuth, (req, res) => {
     const { command } = req.body || {};
     if (!command) {
@@ -268,34 +246,6 @@ async function main() {
     const { mode } = req.body;
     io.emit('mode-change', { mode });
     res.json({ success: true, mode });
-  });
-
-  // --- Built-in assistant's learned knowledge ---
-  // The dashboard's chat orb pattern-matches locally, but any question it
-  // doesn't know gets offered back to the user as "teach: <answer>" — saved
-  // here and broadcast to every connected client so the whole dashboard
-  // "learns" it immediately, not just the browser tab that taught it.
-  app.get('/api/assistant/knowledge', requireAuth, async (req, res) => {
-    try {
-      const entries = await db.getLearnedKnowledge();
-      res.json({ success: true, entries });
-    } catch (err) {
-      res.status(500).json({ success: false, message: 'Failed to load learned knowledge' });
-    }
-  });
-
-  app.post('/api/assistant/knowledge', requireAuth, async (req, res) => {
-    try {
-      const { question, answer } = req.body || {};
-      if (!question || !question.trim() || !answer || !answer.trim()) {
-        return res.status(400).json({ success: false, message: 'Both a question and an answer are required' });
-      }
-      const entry = await db.addLearnedKnowledge({ question: question.trim(), answer: answer.trim(), userId: req.user.id });
-      io.emit('assistant-knowledge-added', entry);
-      res.json({ success: true, entry });
-    } catch (err) {
-      res.status(500).json({ success: false, message: 'Failed to save that' });
-    }
   });
 
   // --- Phone camera session endpoints ---
@@ -431,7 +381,7 @@ async function main() {
     console.log(`=======================================================`);
     console.log(`🚀 Express AI-GOS Server active on https://localhost:${PORT}`);
     console.log(`   LAN address for phone pairing: https://${getLanIp()}:${PORT}`);
-    console.log(`   (self-signed certificate — your browser will warn once; that's expected)`);
+    console.log(`   (run "npm run setup:https" once if your browser shows a certificate warning)`);
     console.log(`=======================================================`);
   });
 }

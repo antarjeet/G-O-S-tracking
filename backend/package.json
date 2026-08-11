@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "nodemon server.js",
-    "dev": "nodemon server.js"
+    "dev": "nodemon server.js",
+    "setup:https": "node scripts/generate-trusted-cert.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

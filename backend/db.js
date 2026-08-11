@@ -15,7 +15,6 @@ const CI_COLLATION = { locale: 'en', strength: 2 };
 
 let usersCol = null;
 let sessionsCol = null;
-let knowledgeCol = null;
 let connecting = null;
 
 function connect() {
@@ -26,7 +25,6 @@ function connect() {
       const db = client.db(DB_NAME);
       usersCol = db.collection('users');
       sessionsCol = db.collection('sessions');
-      knowledgeCol = db.collection('assistant_knowledge');
       await usersCol.createIndex({ username: 1 }, { unique: true, collation: CI_COLLATION });
       await usersCol.createIndex({ email: 1 }, { unique: true, collation: CI_COLLATION });
       await usersCol.createIndex({ id: 1 }, { unique: true });
@@ -114,27 +112,6 @@ async function deleteSession(token) {
   await sessionsCol.deleteOne({ token });
 }
 
-// Learned Q&A for the dashboard's built-in assistant — taught by users via
-// the "teach: <answer>" chat flow, shared across every account/session
-// (there's nothing user-specific about knowing how the project works).
-async function getLearnedKnowledge() {
-  await connect();
-  return knowledgeCol.find({}).sort({ createdAt: 1 }).toArray();
-}
-
-async function addLearnedKnowledge({ question, answer, userId }) {
-  await connect();
-  const entry = {
-    id: crypto.randomUUID(),
-    question,
-    answer,
-    userId,
-    createdAt: new Date().toISOString()
-  };
-  await knowledgeCol.insertOne(entry);
-  return entry;
-}
-
 module.exports = {
   findUserByUsername,
   findUserByEmail,
@@ -145,7 +122,5 @@ module.exports = {
   deleteUser,
   createSession,
   findSession,
-  deleteSession,
-  getLearnedKnowledge,
-  addLearnedKnowledge
+  deleteSession
 };
