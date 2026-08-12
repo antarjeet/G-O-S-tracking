@@ -369,6 +369,106 @@
     .overlay-chip:hover {
       background: rgba(4, 6, 14, 0.92);
     }
+
+    /* ============ Responsive layout ============ */
+
+    /* Structural grids driven from JSX keep grid-template-columns here
+       rather than inline — an inline style always outranks a stylesheet
+       rule regardless of viewport, so these breakpoints can only take
+       effect if the column definition itself lives in CSS. */
+    .responsive-grid { display: grid; }
+    .grid-hero { grid-template-columns: 1.1fr 0.9fr; }
+    .grid-main-side { grid-template-columns: 1.2fr 0.8fr; }
+    .grid-main-side-wide { grid-template-columns: 1.3fr 0.7fr; }
+    .grid-cols-2 { grid-template-columns: repeat(2, 1fr); }
+    .grid-cols-4 { grid-template-columns: repeat(4, 1fr); }
+
+    @media (max-width: 1024px) {
+      .grid-hero, .grid-main-side, .grid-main-side-wide { grid-template-columns: 1fr; }
+      .grid-cols-4 { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 640px) {
+      .grid-cols-2, .grid-cols-4 { grid-template-columns: 1fr; }
+    }
+
+    .app-main { padding: 2rem 3rem; }
+    @media (max-width: 640px) {
+      .app-main { padding: 1.25rem 1rem; }
+    }
+
+    /* Top navbar: the tab strip + status/actions live in one collapsible
+       group (.navbar-collapsible) that sits inline next to the logo on a
+       wide screen, and turns into a hamburger-toggled dropdown below the
+       logo row once the "0X Long Tab Name" pills no longer fit a phone's
+       width. The hamburger button itself only exists visually below that
+       breakpoint (display:none above it), so no JS media-query tracking
+       is needed to decide whether it's shown. */
+    .navbar-toggle { display: none; }
+
+    .navbar-collapsible {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex: 1;
+      gap: 1rem;
+      margin-left: 2rem;
+      min-width: 0;
+    }
+
+    .navbar-actions { flex-wrap: wrap; justify-content: flex-end; }
+
+    .nav-pills {
+      max-width: 100%;
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .nav-pills::-webkit-scrollbar { display: none; }
+    .nav-tab { white-space: nowrap; }
+
+    @media (max-width: 900px) {
+      .top-navbar { flex-wrap: wrap; row-gap: 0.6rem; padding: 0.8rem 1rem; }
+
+      .navbar-toggle {
+        display: flex; align-items: center; justify-content: center;
+        width: 40px; height: 38px; margin-left: auto;
+        border-radius: 8px; background: rgba(255, 255, 255, 0.05);
+        border: 1px solid var(--border-color); color: var(--text-main);
+        font-size: 1.2rem; cursor: pointer;
+      }
+
+      /* Collapsed by default; the hamburger toggles .open. Ordered after
+         the logo+toggle row (which stays on row 1 via flex-wrap) so it
+         drops down as its own full-width row underneath. */
+      .navbar-collapsible {
+        display: none;
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        margin-left: 0;
+        gap: 0.6rem;
+        order: 10;
+      }
+      .navbar-collapsible.open { display: flex; }
+
+      .nav-pills { flex-direction: column; overflow-x: visible; width: 100%; }
+      .nav-tab { width: 100%; justify-content: flex-start; }
+      .navbar-actions { flex-direction: column; align-items: stretch; width: 100%; }
+    }
+
+    @media (max-width: 480px) {
+      .nav-tab { padding: 0.5rem 0.75rem; font-size: 0.78rem; }
+      .logo-group { font-size: 1.2rem; }
+      .auth-card { padding: 1.4rem !important; }
+    }
+
+    /* Fixed-position modal overlays (auth gate, admin panel, QR pairing)
+       fill the viewport with no padding of their own, so on a narrow phone
+       their card would land flush against the screen edges with zero
+       breathing room. */
+    .modal-overlay { padding: 1rem; }
+
+    .admin-table-scroll { width: 100%; overflow-x: auto; }
   </style>
 </head>
 <body>
@@ -491,7 +591,7 @@
       );
 
       return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }} onClick={onClose}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000 }} className="modal-overlay" onClick={onClose}>
           {content}
         </div>
       );
@@ -534,7 +634,7 @@
       };
 
       return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={onClose}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} className="modal-overlay" onClick={onClose}>
           <div className="glass-card" style={{ width: '520px', maxWidth: '90vw', padding: '1.6rem' }} onClick={(e) => e.stopPropagation()}>
             <div className="glass-card-header">
               <div className="card-title">👥 USER MANAGEMENT</div>
@@ -543,34 +643,36 @@
             {error && <p className="auth-error">{error}</p>}
             {!users && !error && <p style={{ color: 'var(--text-muted)' }}>Loading users…</p>}
             {users && (
-              <table className="admin-users-table">
-                <thead><tr><th>User</th><th>Role</th><th></th></tr></thead>
-                <tbody>
-                  {users.map((u) => (
-                    <tr key={u.id}>
-                      <td>
-                        <div>{u.username}{u.id === currentUser.id ? ' (you)' : ''}</div>
-                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{u.email}</div>
-                      </td>
-                      <td>{u.isAdmin ? <span style={{ color: 'var(--accent-pink)' }}>Admin</span> : 'User'}</td>
-                      <td>
-                        {u.isAdmin ? (
-                          <button disabled={busyId === u.id} onClick={() => runAction(u.id, 'demote')}>Demote</button>
-                        ) : (
-                          <button disabled={busyId === u.id} onClick={() => runAction(u.id, 'promote')}>Promote</button>
-                        )}
-                        <button
-                          className="admin-delete-btn"
-                          disabled={busyId === u.id}
-                          onClick={() => { if (window.confirm(`Delete account "${u.username}"? This can't be undone.`)) runAction(u.id, 'delete'); }}
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="admin-table-scroll">
+                <table className="admin-users-table">
+                  <thead><tr><th>User</th><th>Role</th><th></th></tr></thead>
+                  <tbody>
+                    {users.map((u) => (
+                      <tr key={u.id}>
+                        <td>
+                          <div>{u.username}{u.id === currentUser.id ? ' (you)' : ''}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{u.email}</div>
+                        </td>
+                        <td>{u.isAdmin ? <span style={{ color: 'var(--accent-pink)' }}>Admin</span> : 'User'}</td>
+                        <td>
+                          {u.isAdmin ? (
+                            <button disabled={busyId === u.id} onClick={() => runAction(u.id, 'demote')}>Demote</button>
+                          ) : (
+                            <button disabled={busyId === u.id} onClick={() => runAction(u.id, 'promote')}>Promote</button>
+                          )}
+                          <button
+                            className="admin-delete-btn"
+                            disabled={busyId === u.id}
+                            onClick={() => { if (window.confirm(`Delete account "${u.username}"? This can't be undone.`)) runAction(u.id, 'delete'); }}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </div>
@@ -760,6 +862,7 @@
     // --- Main Single Page Application Component ---
     const App = () => {
       const [activeTab, setActiveTab] = useState('landing');
+      const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
       const [mode, setMode] = useState('Mouse Control');
       const [jarvisInput, setJarvisInput] = useState('');
       const [showQrModal, setShowQrModal] = useState(false);
@@ -798,6 +901,20 @@
       const [phoneConnected, setPhoneConnected] = useState(false);
       const [phoneSession, setPhoneSession] = useState(null);
       const [phoneError, setPhoneError] = useState('');
+
+      // Cursor-speed multiplier for the 05 Phone & Settings tab. Persisted
+      // locally so it survives a page reload and gets sent as the engine's
+      // starting value; while the engine is already running, "Save Engine
+      // Settings" also pushes it live via the SET_MOUSE_SPEED: command (see
+      // ultimate_gesture_control.py) so there's no restart needed.
+      const [mouseSpeed, setMouseSpeed] = useState(() => {
+        const saved = parseFloat(localStorage.getItem('aigos_mouse_speed'));
+        return Number.isFinite(saved) ? saved : 1.0;
+      });
+      useEffect(() => {
+        localStorage.setItem('aigos_mouse_speed', String(mouseSpeed));
+      }, [mouseSpeed]);
+      const [settingsSavedMsg, setSettingsSavedMsg] = useState('');
 
       // --- Browser-side voice typing (Web Speech API) ---
       const recognitionRef = useRef(null);
@@ -898,14 +1015,14 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             ...AUTH_OPTS,
-            body: JSON.stringify({ cameraSource: phoneConnected ? 'phone' : '' })
+            body: JSON.stringify({ cameraSource: phoneConnected ? 'phone' : '', mouseSpeed })
           });
           const data = await res.json();
           setIsEngineRunning(!!data.engineActive);
         } catch (err) {
           console.error('Could not reach the AI-GOS backend:', err);
         }
-      }, [phoneConnected]);
+      }, [phoneConnected, mouseSpeed]);
       // Clicking Start Engine while logged out opens the login modal instead
       // of erroring — the backend would 401 on this endpoint anyway.
       const handleToggleEngine = useCallback(() => requireLogin(doToggleEngine), [requireLogin, doToggleEngine]);
@@ -1044,69 +1161,80 @@
 
           {/* Top Navbar */}
           <header className="top-navbar">
-            <div className="logo-group" onClick={() => setActiveTab('landing')}>
+            <div className="logo-group" onClick={() => { setActiveTab('landing'); setMobileMenuOpen(false); }}>
               <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: 'var(--gradient-main)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 ⚡
               </div>
               <span className="logo-badge">AI-GOS</span>
             </div>
 
-            <nav className="nav-pills">
-              {[
-                { id: 'landing', label: '01 Landing Page' },
-                { id: 'dashboard', label: '02 Dashboard' },
-                { id: 'analytics', label: '03 Gesture Analytics' },
-                { id: 'voice', label: '04 Voice AI' },
-                { id: 'settings', label: '05 Phone & Settings' }
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
-                  onClick={() => setActiveTab(tab.id)}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
+            <button
+              className="navbar-toggle"
+              onClick={() => setMobileMenuOpen(o => !o)}
+              aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? '✕' : '☰'}
+            </button>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
-              <span className="badge-status badge-live" title={backendConnected ? 'Connected to AI-GOS backend' : 'Backend unreachable — run npm start in backend/'}>
-                <span className="status-dot" style={{ background: backendConnected ? 'var(--accent-green)' : 'var(--accent-pink)' }}></span> {backendConnected ? (isEngineRunning ? 'Engine Running' : 'Backend Online') : 'Backend Offline'}
-              </span>
-              <button
-                onClick={handleToggleEngine}
-                disabled={user && !backendConnected}
-                title={!user ? 'Log in to start the engine' : backendConnected ? '' : 'Start the backend (npm start in backend/) first'}
-                style={{ background: isEngineRunning ? 'rgba(255, 0, 127, 0.15)' : 'rgba(0, 242, 254, 0.15)', border: '1px solid rgba(255, 0, 127, 0.3)', color: isEngineRunning ? 'var(--accent-pink)' : 'var(--primary)', padding: '0.45rem 0.9rem', borderRadius: '8px', cursor: (user && !backendConnected) ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.8rem', opacity: (user && !backendConnected) ? 0.5 : 1 }}
-              >
-                {isEngineRunning ? 'Stop Engine' : 'Start Engine'}
-              </button>
-              {user ? (
-                <>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user.username}{user.isAdmin ? ' (admin)' : ''}</span>
-                  {user.isAdmin && (
-                    <button className="btn-secondary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }} onClick={() => setAdminPanelOpen(true)}>Users</button>
-                  )}
-                  <button className="btn-secondary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }} onClick={handleLogout}>Log out</button>
-                </>
-              ) : (
-                <button className="btn-primary" style={{ padding: '0.4rem 0.9rem', fontSize: '0.8rem' }} onClick={() => setShowAuthGate(true)}>Log In / Sign Up</button>
-              )}
+            <div className={`navbar-collapsible ${mobileMenuOpen ? 'open' : ''}`}>
+              <nav className="nav-pills">
+                {[
+                  { id: 'landing', label: '01 Landing Page' },
+                  { id: 'dashboard', label: '02 Dashboard' },
+                  { id: 'analytics', label: '03 Gesture Analytics' },
+                  { id: 'voice', label: '04 Voice AI' },
+                  { id: 'settings', label: '05 Phone & Settings' }
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
+                    onClick={() => { setActiveTab(tab.id); setMobileMenuOpen(false); }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </nav>
+
+              <div className="navbar-actions" style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                <span className="badge-status badge-live" title={backendConnected ? 'Connected to AI-GOS backend' : 'Backend unreachable — run npm start in backend/'}>
+                  <span className="status-dot" style={{ background: backendConnected ? 'var(--accent-green)' : 'var(--accent-pink)' }}></span> {backendConnected ? (isEngineRunning ? 'Engine Running' : 'Backend Online') : 'Backend Offline'}
+                </span>
+                <button
+                  onClick={handleToggleEngine}
+                  disabled={user && !backendConnected}
+                  title={!user ? 'Log in to start the engine' : backendConnected ? '' : 'Start the backend (npm start in backend/) first'}
+                  style={{ background: isEngineRunning ? 'rgba(255, 0, 127, 0.15)' : 'rgba(0, 242, 254, 0.15)', border: '1px solid rgba(255, 0, 127, 0.3)', color: isEngineRunning ? 'var(--accent-pink)' : 'var(--primary)', padding: '0.45rem 0.9rem', borderRadius: '8px', cursor: (user && !backendConnected) ? 'not-allowed' : 'pointer', fontWeight: 600, fontSize: '0.8rem', opacity: (user && !backendConnected) ? 0.5 : 1 }}
+                >
+                  {isEngineRunning ? 'Stop Engine' : 'Start Engine'}
+                </button>
+                {user ? (
+                  <>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{user.username}{user.isAdmin ? ' (admin)' : ''}</span>
+                    {user.isAdmin && (
+                      <button className="btn-secondary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }} onClick={() => { setAdminPanelOpen(true); setMobileMenuOpen(false); }}>Users</button>
+                    )}
+                    <button className="btn-secondary" style={{ padding: '0.3rem 0.7rem', fontSize: '0.75rem' }} onClick={() => { handleLogout(); setMobileMenuOpen(false); }}>Log out</button>
+                  </>
+                ) : (
+                  <button className="btn-primary" style={{ padding: '0.4rem 0.9rem', fontSize: '0.8rem' }} onClick={() => { setShowAuthGate(true); setMobileMenuOpen(false); }}>Log In / Sign Up</button>
+                )}
+              </div>
             </div>
           </header>
 
           {/* Views Container */}
-          <main style={{ padding: '2rem 3rem', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
+          <main className="app-main" style={{ maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
             
             {/* VIEW 01: LANDING PAGE */}
             {activeTab === 'landing' && (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1.1fr 0.9fr', gap: '3rem', alignItems: 'center', marginBottom: '3.5rem' }}>
+                <div className="responsive-grid grid-hero" style={{ gap: '3rem', alignItems: 'center', marginBottom: '3.5rem' }}>
                   <div>
                     <div style={{ display: 'inline-flex', gap: '0.4rem', background: 'rgba(0, 242, 254, 0.08)', border: '1px solid rgba(0, 242, 254, 0.25)', color: 'var(--primary)', padding: '0.35rem 0.9rem', borderRadius: '20px', fontSize: '0.8rem', fontWeight: 600, marginBottom: '1.2rem' }}>
                       ✨ Next Generation AI Operating System
                     </div>
-                    <h1 style={{ fontSize: '3.6rem', fontWeight: 800, lineHeight: 1.1, marginBottom: '1.2rem' }}>
+                    <h1 style={{ fontSize: 'clamp(2.1rem, 5.5vw, 3.6rem)', fontWeight: 800, lineHeight: 1.1, marginBottom: '1.2rem' }}>
                       Control Your Computer <br />
                       <span className="logo-badge">Without Touching It</span>
                     </h1>
@@ -1141,7 +1269,7 @@
 
             {/* VIEW 02: DASHBOARD (LIVE CONTROL CENTER) */}
             {activeTab === 'dashboard' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 0.8fr', gap: '1.5rem' }}>
+              <div className="responsive-grid grid-main-side" style={{ gap: '1.5rem' }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                   <div className="glass-card">
                     <div className="glass-card-header">
@@ -1155,7 +1283,7 @@
                     <div className="glass-card-header">
                       <div className="card-title">🛡️ ENGINE STATUS</div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.8rem' }}>
+                    <div className="responsive-grid grid-cols-2" style={{ gap: '0.8rem' }}>
                       {[
                         { name: 'AI Core Engine', ok: isEngineRunning },
                         { name: 'Python ML Engine', ok: isEngineRunning },
@@ -1185,7 +1313,7 @@
                         <div style={{ width: `${confidence}%`, height: '100%', background: 'var(--gradient-main)' }}></div>
                       </div>
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.8rem' }}>
+                    <div className="responsive-grid grid-cols-2" style={{ gap: '0.8rem' }}>
                       <div style={{ background: 'rgba(255,255,255,0.03)', padding: '0.7rem', borderRadius: '8px' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Action</span>
                         <div style={{ fontWeight: 700 }}>{action}</div>
@@ -1227,7 +1355,7 @@
             {/* VIEW 03: GESTURE ANALYTICS */}
             {activeTab === 'analytics' && (
               <div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '1.25rem', marginBottom: '1.5rem' }}>
+                <div className="responsive-grid grid-cols-4" style={{ gap: '1.25rem', marginBottom: '1.5rem' }}>
                   {[
                     { label: 'Total Gestures', val: '1,248', change: '+12.5%' },
                     { label: 'Accuracy', val: '99.2%', change: '+2.1%' },
@@ -1242,7 +1370,7 @@
                   ))}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 0.7fr', gap: '1.5rem' }}>
+                <div className="responsive-grid grid-main-side-wide" style={{ gap: '1.5rem' }}>
                   <div className="glass-card">
                     <div className="glass-card-header"><div className="card-title">📈 GESTURE OVER TIME</div></div>
                     <div style={{ height: '300px' }}><canvas ref={lineChartRef}></canvas></div>
@@ -1307,7 +1435,7 @@
                     "Jarvis, ..." followed by anything at all to talk to the Claude-powered assistant below.
                   </p>
                   <div className="glass-card-header"><div className="card-title" style={{ fontSize: '0.9rem' }}>ENGINE CONTROLS</div></div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.6rem' }}>
+                  <div className="responsive-grid grid-cols-4" style={{ gap: '0.6rem' }}>
                     {ENGINE_COMMANDS.map(({ cmd, label, title }) => (
                       <button
                         key={cmd}
@@ -1387,7 +1515,7 @@
 
             {/* VIEW 05: PHONE CAMERA & SETTINGS */}
             {activeTab === 'settings' && (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+              <div className="responsive-grid grid-cols-2" style={{ gap: '1.5rem' }}>
                 <div className="glass-card">
                   <div className="glass-card-header">
                     <div className="card-title">📱 PHONE CAMERA BRIDGE</div>
@@ -1415,10 +1543,31 @@
                       </div>
                     </div>
                     <div>
-                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Mouse Speed (1.2x)</label>
-                      <input type="range" className="custom-range" defaultValue={50} style={{ marginTop: '0.4rem' }} />
+                      <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Mouse Speed ({mouseSpeed.toFixed(1)}x)</label>
+                      <input
+                        type="range" className="custom-range" min={0.5} max={3} step={0.1}
+                        value={mouseSpeed}
+                        onChange={(e) => setMouseSpeed(parseFloat(e.target.value))}
+                        style={{ marginTop: '0.4rem', width: '100%' }}
+                      />
                     </div>
-                    <button className="btn-primary" onClick={() => alert('Settings Saved!')}>Save Engine Settings</button>
+                    <button
+                      className="btn-primary"
+                      onClick={() => {
+                        if (isEngineRunning) {
+                          handleEngineCommand('SET_MOUSE_SPEED:' + mouseSpeed);
+                          setSettingsSavedMsg('Applied — cursor speed updated live.');
+                        } else {
+                          setSettingsSavedMsg('Saved — will apply next time you start the engine.');
+                        }
+                        setTimeout(() => setSettingsSavedMsg(''), 3000);
+                      }}
+                    >
+                      Save Engine Settings
+                    </button>
+                    {settingsSavedMsg && (
+                      <div style={{ fontSize: '0.78rem', color: 'var(--accent-green)' }}>{settingsSavedMsg}</div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1428,21 +1577,43 @@
 
           {/* QR Modal */}
           {showQrModal && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={() => setShowQrModal(false)}>
-              <div className="glass-card" style={{ textAlign: 'center', padding: '2rem', maxWidth: '360px' }} onClick={(e) => e.stopPropagation()}>
-                <h3>Scan QR to Connect Smartphone</h3>
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} className="modal-overlay" onClick={() => setShowQrModal(false)}>
+              <div className="glass-card" style={{ textAlign: 'center', padding: '2rem', maxWidth: '380px' }} onClick={(e) => e.stopPropagation()}>
+                <h3 style={{ marginBottom: '0.2rem' }}>Scan QR to Connect Smartphone</h3>
+                <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '0 0 1rem' }}>
+                  Phone and this PC must be on the same Wi-Fi network.
+                </p>
 
                 {phoneError && <p className="auth-error">{phoneError}</p>}
                 {!phoneSession && !phoneError && <p style={{ color: 'var(--text-muted)' }}>Generating session…</p>}
 
                 {phoneSession && (
                   <>
-                    <img src={phoneSession.qr} alt="QR code — scan with your phone" style={{ width: '200px', height: '200px', margin: '1rem auto', display: 'block', borderRadius: '12px' }} />
-                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.8rem' }}>
-                      Scan with your phone's camera app. Phone and this PC must be on the same Wi-Fi. Your phone will
-                      show a certificate warning the first time — tap <strong>Advanced → Proceed</strong> (this PC's
-                      own self-signed certificate, safe for a server you're running yourself).
+                    <div style={{
+                      display: 'inline-block', padding: '10px', background: '#fff',
+                      borderRadius: '14px', margin: '0 auto 1rem', boxShadow: '0 8px 24px rgba(0,0,0,0.35)'
+                    }}>
+                      <img src={phoneSession.qr} alt="QR code — scan with your phone" style={{ width: '200px', height: '200px', display: 'block', borderRadius: '4px' }} />
+                    </div>
+
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                      fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.9rem',
+                      color: phoneSession.certTrusted ? 'var(--accent-green)' : '#f5a623'
+                    }}>
+                      {phoneSession.certTrusted ? '🔒 Trusted connection — no warning expected' : '⚠️ Self-signed certificate — phone will warn once'}
+                    </div>
+
+                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.8rem', textAlign: 'left' }}>
+                      {phoneSession.certTrusted
+                        ? <>Scan with your phone's camera app. The pairing page has an <strong>Install security certificate</strong> button
+                            (under the 🔒 badge) that removes browser warnings on the phone entirely — optional, but one tap.</>
+                        : <>Scan with your phone's camera app. Your phone will show a certificate warning the first time —
+                            tap <strong>Advanced → Proceed</strong> (this is this PC's own certificate, safe for a server
+                            you're running yourself). Run <code>npm run setup:https</code> on the PC for a warning-free
+                            connection instead.</>}
                     </p>
+
                     <div style={{ fontSize: '0.75rem', color: phoneConnected ? 'var(--accent-green)' : 'var(--text-muted)', marginBottom: '1rem' }}>
                       {phoneConnected ? '● Phone connected — it will be used as the camera on Start Engine' : '○ Waiting for phone to connect…'}
                     </div>

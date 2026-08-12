@@ -5,57 +5,175 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>AI-GOS — Phone Camera</title>
 <style>
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh; background: #0b0f14; color: #e9edf2;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    display: flex; flex-direction: column; align-items: center; padding: 16px;
+  :root {
+    --bg-0: #070a10;
+    --bg-1: #0d131c;
+    --card: rgba(20, 27, 38, 0.72);
+    --card-border: rgba(255, 255, 255, 0.08);
+    --text: #eef2f7;
+    --text-dim: #8a97a8;
+    --accent: #4f8cff;
+    --accent-2: #7c5cff;
+    --green: #2ecc71;
+    --amber: #f5a623;
+    --red: #ff3b5c;
   }
-  h1 { font-size: 1.05rem; margin: 8px 0 4px; letter-spacing: 0.5px; }
-  .sub { color: #8a97a8; font-size: 0.8rem; margin-bottom: 16px; text-align: center; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(79, 140, 255, 0.16), transparent 60%),
+      radial-gradient(900px 500px at 100% 110%, rgba(124, 92, 255, 0.14), transparent 55%),
+      var(--bg-0);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    display: flex; flex-direction: column; align-items: center;
+    padding: 22px 16px 32px;
+  }
+
+  .brand { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .brand-dot {
+    width: 9px; height: 9px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    box-shadow: 0 0 12px rgba(79, 140, 255, 0.8);
+  }
+  h1 { font-size: 1.05rem; margin: 0; font-weight: 700; letter-spacing: 0.3px; }
+  .sub { color: var(--text-dim); font-size: 0.8rem; margin: 6px 0 18px; text-align: center; max-width: 420px; line-height: 1.4; }
+
+  .card {
+    width: 100%; max-width: 480px;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: 18px;
+    backdrop-filter: blur(10px);
+    padding: 14px;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.35);
+  }
+
   .video-wrap {
-    position: relative; width: 100%; max-width: 480px; aspect-ratio: 4 / 3;
-    background: #000; border-radius: 12px; overflow: hidden; border: 2px solid #1f2a37;
+    position: relative; width: 100%; aspect-ratio: 4 / 3;
+    background: #000; border-radius: 14px; overflow: hidden;
+    border: 1px solid var(--card-border);
   }
   video { width: 100%; height: 100%; object-fit: cover; display: block; }
+  /* Front ("selfie") camera sensors deliver raw, unmirrored frames — shown
+     as-is, movements read backwards (raise your right hand, it appears on
+     the left) because that's the opposite of how a mirror or a video call
+     shows you yourself. Flipping the *display* only (not the frames this
+     page actually sends, and not the tracking points below) fixes that
+     without touching the coordinates the engine computes on. */
+  video.mirrored { transform: scaleX(-1); }
+  #overlay {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    pointer-events: none;
+  }
+
+  .track-pill {
+    position: absolute; bottom: 10px; left: 10px; padding: 6px 12px; border-radius: 999px;
+    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.3px; color: #7cf7d4;
+    background: rgba(8, 11, 16, 0.6); backdrop-filter: blur(6px);
+    border: 1px solid rgba(124, 247, 212, 0.35);
+  }
+
   .status-pill {
-    position: absolute; top: 10px; left: 10px; padding: 5px 10px; border-radius: 999px;
-    font-size: 0.7rem; font-weight: 700; letter-spacing: 0.5px;
-    background: rgba(0,0,0,0.55); backdrop-filter: blur(4px);
+    position: absolute; top: 10px; left: 10px; padding: 6px 12px; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.3px;
+    background: rgba(8, 11, 16, 0.6); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center;
   }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
-  .dot-live { background:#2ecc71; }
-  .dot-wait { background:#f5a623; animation: blink 1.2s infinite; }
-  .dot-err { background:#ff3b5c; }
+  .sec-badge {
+    position: absolute; top: 10px; right: 10px; padding: 6px 10px; border-radius: 999px;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.2px;
+    background: rgba(8, 11, 16, 0.6); backdrop-filter: blur(6px);
+    border: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; gap: 5px; cursor: pointer;
+  }
+  .sec-badge.secure { color: var(--green); }
+  .sec-badge.warn { color: var(--amber); }
+
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; flex: none; }
+  .dot-live { background: var(--green); box-shadow: 0 0 8px rgba(46,204,113,0.7); }
+  .dot-wait { background: var(--amber); animation: blink 1.2s infinite; }
+  .dot-err { background: var(--red); }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
-  .controls { display: flex; gap: 10px; margin-top: 16px; width: 100%; max-width: 480px; }
+
+  .controls { display: flex; gap: 10px; margin-top: 14px; }
   button {
-    flex: 1; padding: 12px; border-radius: 10px; border: none; font-size: 0.9rem;
-    font-weight: 700; background: #1f2a37; color: #e9edf2; cursor: pointer;
+    flex: 1; padding: 13px; border-radius: 12px; border: none; font-size: 0.88rem;
+    font-weight: 700; cursor: pointer; transition: transform 0.08s ease, background 0.15s ease;
+    background: rgba(255,255,255,0.06); color: var(--text);
+    border: 1px solid var(--card-border);
   }
-  button:active { background: #2a3a4d; }
+  button:active { transform: scale(0.97); background: rgba(255,255,255,0.1); }
+  .btn-accent {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    border: none; color: white;
+  }
+
+  .frame-count { color: var(--text-dim); font-size: 0.72rem; margin-top: 12px; text-align: center; }
+
   .error-box {
-    margin-top: 16px; padding: 12px 14px; background: #2a1420; border: 1px solid #ff3b5c;
-    border-radius: 10px; font-size: 0.85rem; max-width: 480px; display: none;
+    margin-top: 14px; padding: 12px 14px; background: rgba(255,59,92,0.1);
+    border: 1px solid rgba(255,59,92,0.4); color: #ffb2c0;
+    border-radius: 12px; font-size: 0.82rem; display: none; line-height: 1.4;
   }
-  .frame-count { color: #8a97a8; font-size: 0.75rem; margin-top: 10px; }
+
+  /* Security panel */
+  .sec-panel {
+    width: 100%; max-width: 480px; margin-top: 12px;
+    background: var(--card); border: 1px solid var(--card-border); border-radius: 16px;
+    backdrop-filter: blur(10px); overflow: hidden;
+    max-height: 0; opacity: 0; transition: max-height 0.25s ease, opacity 0.2s ease;
+  }
+  .sec-panel.open { max-height: 420px; opacity: 1; }
+  .sec-panel-inner { padding: 16px; }
+  .sec-panel h2 { font-size: 0.85rem; margin: 0 0 6px; }
+  .sec-panel p { font-size: 0.78rem; color: var(--text-dim); line-height: 1.5; margin: 0 0 10px; }
+  .sec-panel a.install-btn {
+    display: block; text-align: center; text-decoration: none;
+    padding: 12px; border-radius: 12px; font-weight: 700; font-size: 0.85rem;
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: white;
+    margin-bottom: 10px;
+  }
+  .sec-panel details { font-size: 0.76rem; color: var(--text-dim); margin-top: 4px; }
+  .sec-panel summary { cursor: pointer; color: var(--text); font-weight: 600; }
+  .sec-panel ol { margin: 8px 0 0; padding-left: 18px; line-height: 1.6; }
+
+  .footer-note { margin-top: 16px; color: var(--text-dim); font-size: 0.7rem; text-align: center; max-width: 420px; }
 </style>
 </head>
 <body>
-  <h1>AI-GOS · Phone Camera</h1>
+  <div class="brand"><span class="brand-dot"></span><h1>AI-GOS · Phone Camera</h1></div>
   <div class="sub">Keep this tab open and your phone awake. Point the camera at your hand.</div>
 
-  <div class="video-wrap">
-    <video id="preview" autoplay playsinline muted></video>
-    <div class="status-pill" id="statusPill"><span class="dot dot-wait" id="statusDot"></span><span id="statusText">Requesting camera…</span></div>
+  <div class="card">
+    <div class="video-wrap">
+      <video id="preview" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div class="status-pill" id="statusPill"><span class="dot dot-wait" id="statusDot"></span><span id="statusText">Requesting camera…</span></div>
+      <div class="sec-badge warn" id="secBadge" title="Tap for connection security details">🔒 Checking…</div>
+      <div class="track-pill" id="trackPill" style="display:none;"><span id="trackText">Tracking…</span></div>
+    </div>
+
+    <div class="controls">
+      <button id="flipBtn">🔄 Flip Camera</button>
+      <button id="trackToggleBtn">✋ Hide Points</button>
+    </div>
+
+    <div class="frame-count" id="frameCount"></div>
+    <div class="error-box" id="errorBox"></div>
   </div>
 
-  <div class="controls">
-    <button id="flipBtn">Flip Camera</button>
+  <div class="sec-panel" id="secPanel">
+    <div class="sec-panel-inner" id="secPanelInner">
+      <!-- populated by script -->
+    </div>
   </div>
 
-  <div class="frame-count" id="frameCount"></div>
-  <div class="error-box" id="errorBox"></div>
+  <div class="footer-note">This page only runs on your local Wi-Fi — frames go straight to your own PC, nowhere else.</div>
 
   <script>
     const sessionId = window.location.pathname.split('/').filter(Boolean).pop();
@@ -65,15 +183,30 @@
     const errorBox = document.getElementById('errorBox');
     const frameCount = document.getElementById('frameCount');
     const flipBtn = document.getElementById('flipBtn');
+    const secBadge = document.getElementById('secBadge');
+    const secPanel = document.getElementById('secPanel');
+    const secPanelInner = document.getElementById('secPanelInner');
+    const overlay = document.getElementById('overlay');
+    const octx = overlay.getContext('2d');
+    const trackPill = document.getElementById('trackPill');
+    const trackText = document.getElementById('trackText');
+    const trackToggleBtn = document.getElementById('trackToggleBtn');
+    const videoWrap = document.querySelector('.video-wrap');
 
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
+    // Off-screen canvas used only to JPEG-encode outgoing frames — separate
+    // from `overlay` above, which is the visible on-screen tracking canvas.
+    const captureCanvas = document.createElement('canvas');
+    const captureCtx = captureCanvas.getContext('2d');
 
     let stream = null;
     let facingMode = 'environment';
     let sent = 0;
     let posting = false;
     let captureTimer = null;
+    let showPoints = true;
+    let latestLandmarks = null;
+    let landmarksActive = false;
+    let landmarksTimer = null;
 
     function setStatus(state, text) {
       statusDot.className = 'dot ' + (state === 'live' ? 'dot-live' : state === 'error' ? 'dot-err' : 'dot-wait');
@@ -86,11 +219,80 @@
       setStatus('error', 'Error');
     }
 
+    // --- Connection security: tells the phone whether this server's cert
+    // is a trusted mkcert-issued one (installing the CA below removes any
+    // browser warning) or an untrusted self-signed fallback (nothing to
+    // install — "Advanced -> Proceed" on the leaf cert is the only path).
+    async function loadCertInfo() {
+      try {
+        const res = await fetch('/api/cert-info');
+        const info = await res.json();
+        renderSecurity(info);
+      } catch {
+        renderSecurity({ trusted: false, caDownloadAvailable: false });
+      }
+    }
+
+    function renderSecurity(info) {
+      const isHttps = window.location.protocol === 'https:';
+      if (info.trusted && isHttps) {
+        secBadge.className = 'sec-badge secure';
+        secBadge.textContent = '🔒 Secure';
+      } else {
+        secBadge.className = 'sec-badge warn';
+        secBadge.textContent = '⚠️ Certificate';
+      }
+
+      let html = '<h2>Connection security</h2>';
+      if (info.caDownloadAvailable) {
+        html += `
+          <p>This server's certificate is issued by a trusted local authority. Install it once and future
+          visits load with no warning at all — same as this already works on the PC running AI-GOS.</p>
+          <a class="install-btn" href="/root-ca.pem" download="ai-gos-ca.pem">⬇️ Install security certificate</a>
+          <details>
+            <summary>iPhone / iPad steps</summary>
+            <ol>
+              <li>Tap the button above, allow the download, then open <b>Settings</b>.</li>
+              <li>Tap <b>Profile Downloaded</b> near the top, then <b>Install</b> (enter your passcode).</li>
+              <li>Go to <b>Settings → General → About → Certificate Trust Settings</b> and enable full trust for "ai-gos.local".</li>
+            </ol>
+          </details>
+          <details>
+            <summary>Android steps</summary>
+            <ol>
+              <li>Tap the button above to download the certificate file.</li>
+              <li>Open <b>Settings → Security → Encryption &amp; credentials → Install a certificate → CA certificate</b>.</li>
+              <li>Pick the downloaded file and confirm.</li>
+            </ol>
+          </details>
+          <p style="margin-top:10px;">Skipping this is fine too — tap <b>Advanced → Proceed</b> on the warning page instead.</p>
+        `;
+      } else {
+        html += `
+          <p>This server is using a temporary, untrusted certificate, so your browser will warn you the first
+          time you load this page. That's expected for a server you're running yourself on your own network —
+          tap <b>Advanced</b>, then <b>Proceed</b> (wording varies by browser) to continue.</p>
+          <p>For a warning-free connection instead, install <a href="https://github.com/FiloSottile/mkcert" style="color:#9db8ff;">mkcert</a>
+          on the PC running AI-GOS and run <code>npm run setup:https</code>, then reconnect.</p>
+        `;
+      }
+      secPanelInner.innerHTML = html;
+    }
+
+    secBadge.addEventListener('click', () => secPanel.classList.toggle('open'));
+
     async function startCamera() {
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
       setStatus('wait', 'Requesting camera…');
+      // Only the front camera's *display* needs the mirrored fix — the back
+      // camera already faces away from you, so its raw feed reads correctly.
+      // The overlay is never CSS-mirrored (see drawOverlay()'s flipX): it
+      // computes the right side per-point instead, since the two axes
+      // (video's own selfie-mirror preference vs. the engine's landmark
+      // coordinate space) aren't the same thing and don't always agree.
+      video.classList.toggle('mirrored', facingMode === 'user');
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode, width: { ideal: 640 }, height: { ideal: 480 } },
@@ -115,10 +317,10 @@
 
     function captureAndSend() {
       if (posting || !video.videoWidth) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-      canvas.toBlob(
+      captureCanvas.width = video.videoWidth;
+      captureCanvas.height = video.videoHeight;
+      captureCtx.drawImage(video, 0, 0, captureCanvas.width, captureCanvas.height);
+      captureCanvas.toBlob(
         (blob) => {
           if (!blob) return;
           posting = true;
@@ -150,6 +352,105 @@
       startCamera();
     });
 
+    // --- Hand-tracking overlay: MediaPipe only runs on the PC, so the
+    // points drawn here are polled back from the engine's own telemetry
+    // (see /api/phone-session/landmarks in server.js) rather than computed
+    // on-device. Coordinates are normalized 0..1 against the exact frame
+    // this phone sent, so they line up with the live preview underneath as
+    // long as the overlay canvas is kept sized to match the video element.
+    const HAND_CONNECTIONS = [
+      [0,1],[1,2],[2,3],[3,4],
+      [0,5],[5,6],[6,7],[7,8],
+      [5,9],[9,10],[10,11],[11,12],
+      [9,13],[13,14],[14,15],[15,16],
+      [13,17],[17,18],[18,19],[19,20],
+      [0,17]
+    ];
+
+    function resizeOverlay() {
+      const rect = videoWrap.getBoundingClientRect();
+      overlay.width = rect.width;
+      overlay.height = rect.height;
+    }
+    window.addEventListener('resize', resizeOverlay);
+    video.addEventListener('loadedmetadata', resizeOverlay);
+    resizeOverlay();
+
+    function setTracking(active, gesture, confidence) {
+      landmarksActive = active;
+      trackPill.style.display = active && showPoints ? 'block' : 'none';
+      if (active) {
+        trackText.textContent = `${gesture || 'IDLE'} · ${Math.round(confidence || 0)}%`;
+      }
+    }
+
+    async function pollLandmarks() {
+      try {
+        const res = await fetch('/api/phone-session/landmarks');
+        const data = await res.json();
+        latestLandmarks = data.active && Array.isArray(data.landmarks) && data.landmarks.length >= 21
+          ? data.landmarks : null;
+        setTracking(!!latestLandmarks, data.gesture, data.confidence);
+      } catch {
+        latestLandmarks = null;
+        setTracking(false);
+      }
+    }
+
+    function drawOverlay() {
+      octx.clearRect(0, 0, overlay.width, overlay.height);
+      if (showPoints && latestLandmarks) {
+        const w = overlay.width, h = overlay.height;
+        // The engine always runs on a horizontally-flipped copy of whatever
+        // frame this phone sent (cv2.flip(img, 1) in
+        // ultimate_gesture_control.py, unconditional for every camera
+        // source — it's what makes mouse-move direction feel natural), so
+        // landmark.x is always in that flipped frame's coordinate space,
+        // not the raw frame this page actually captured and is displaying.
+        // The video's on-screen mirroring (via the "mirrored" CSS class,
+        // front camera only) already visually reproduces that flip, so:
+        // mirrored display -> draw landmark.x as-is; unmirrored display ->
+        // flip it back so the points land on the raw frame's own axis.
+        const flipX = !video.classList.contains('mirrored');
+        const pts = latestLandmarks.map((lm) => ({
+          x: (flipX ? 1 - lm.x : lm.x) * w,
+          y: lm.y * h
+        }));
+
+        octx.strokeStyle = 'rgba(124, 247, 212, 0.85)';
+        octx.lineWidth = 2.5;
+        octx.shadowColor = '#00f2fe';
+        octx.shadowBlur = 6;
+        HAND_CONNECTIONS.forEach(([a, b]) => {
+          if (!pts[a] || !pts[b]) return;
+          octx.beginPath();
+          octx.moveTo(pts[a].x, pts[a].y);
+          octx.lineTo(pts[b].x, pts[b].y);
+          octx.stroke();
+        });
+
+        pts.forEach((p) => {
+          octx.beginPath();
+          octx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+          octx.fillStyle = '#ffffff';
+          octx.shadowColor = '#00f2fe';
+          octx.shadowBlur = 8;
+          octx.fill();
+        });
+      }
+      requestAnimationFrame(drawOverlay);
+    }
+
+    trackToggleBtn.addEventListener('click', () => {
+      showPoints = !showPoints;
+      trackToggleBtn.textContent = showPoints ? '✋ Hide Points' : '✋ Show Points';
+      trackPill.style.display = showPoints && landmarksActive ? 'block' : 'none';
+    });
+
+    landmarksTimer = setInterval(pollLandmarks, 80);
+    requestAnimationFrame(drawOverlay);
+
+    loadCertInfo();
     startCamera();
   </script>
 </body>

@@ -18,11 +18,40 @@ const { execFileSync } = require('child_process');
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const selfsigned = require('selfsigned');
 
 const CERT_DIR = path.join(__dirname, 'certs');
 const CERT_PATH = path.join(CERT_DIR, 'cert.pem');
 const KEY_PATH = path.join(CERT_DIR, 'key.pem');
+
+// Whether a cert was mkcert-issued (trusted) or the selfsigned fallback
+// (untrusted) isn't tracked anywhere when loading from the on-disk cache, so
+// it's read back off the cert itself: mkcert always stamps its issuer O= as
+// "mkcert development CA", which a plain selfsigned.generate() cert never has.
+function isMkcertIssued(certPem) {
+  try {
+    return /mkcert development CA/i.test(new crypto.X509Certificate(certPem).issuer);
+  } catch {
+    return false;
+  }
+}
+
+// Path to mkcert's own root CA certificate (the public half — safe to hand
+// to a phone; the private key never leaves this machine's mkcert install).
+// Installing it into the phone's trust store is what turns the phone
+// browser's "Not secure" warning into an actual padlock, same as this PC
+// already gets from mkcert -install. Returns null if mkcert isn't installed
+// or hasn't created a root CA yet (e.g. the selfsigned fallback is active).
+function getRootCaPath() {
+  try {
+    const caRoot = execFileSync('mkcert', ['-CAROOT'], { timeout: 5000 }).toString().trim();
+    const caPath = path.join(caRoot, 'rootCA.pem');
+    return fs.existsSync(caPath) ? caPath : null;
+  } catch {
+    return null;
+  }
+}
 
 const MKCERT_INSTALL_HELP = [
   'Install mkcert for a trusted certificate with no browser warnings:',
@@ -84,15 +113,16 @@ async function generateSelfSigned() {
 
 async function getOrCreateCertificate({ forceRegenerate = false } = {}) {
   if (!forceRegenerate && fs.existsSync(CERT_PATH) && fs.existsSync(KEY_PATH)) {
-    return { cert: fs.readFileSync(CERT_PATH), key: fs.readFileSync(KEY_PATH) };
+    const cert = fs.readFileSync(CERT_PATH);
+    return { cert, key: fs.readFileSync(KEY_PATH), trusted: isMkcertIssued(cert) };
   }
 
   if (mkcertAvailable()) {
     console.log('Setting up a trusted local HTTPS certificate via mkcert...');
     try {
       const result = generateWithMkcert();
-      console.log('Trusted certificate ready — no browser warning expected.');
-      return result;
+      console.log('Trusted certificate ready — no browser warning expected on this PC.');
+      return { ...result, trusted: true };
     } catch (err) {
       console.warn(`mkcert failed (${err.message}); falling back to a self-signed certificate.`);
     }
@@ -100,7 +130,11 @@ async function getOrCreateCertificate({ forceRegenerate = false } = {}) {
     console.log('mkcert not found — using an untrusted self-signed certificate for now.');
     for (const line of MKCERT_INSTALL_HELP) console.log('  ' + line);
   }
-  return generateSelfSigned();
+  const result = await generateSelfSigned();
+  return { ...result, trusted: false };
 }
 
-module.exports = { getOrCreateCertificate, getLanIps, mkcertAvailable, CERT_DIR, CERT_PATH, KEY_PATH };
+module.exports = {
+  getOrCreateCertificate, getLanIps, mkcertAvailable, getRootCaPath,
+  CERT_DIR, CERT_PATH, KEY_PATH,
+};

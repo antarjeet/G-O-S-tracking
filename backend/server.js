@@ -19,7 +19,7 @@ const db = require('./db');
 // trusted cert via mkcert when available (see certSetup.js) — every clone
 // of this repo generates and trusts its own on first run, with nothing
 // machine-specific ever committed to git (certs/ is gitignored).
-const { getOrCreateCertificate } = require('./certSetup');
+const { getOrCreateCertificate, getRootCaPath } = require('./certSetup');
 
 function getLanIp() {
   const interfaces = os.networkInterfaces();
@@ -37,8 +37,9 @@ async function main() {
   await ensureAdminFromEnv();
 
   const app = express();
-  const { cert, key } = await getOrCreateCertificate();
+  const { cert, key, trusted: certTrusted } = await getOrCreateCertificate();
   const server = https.createServer({ cert, key }, app);
+  const rootCaPath = certTrusted ? getRootCaPath() : null;
   // Session cookies need credentials on cross-origin requests (frontend on
   // Vite's port, backend on 5000), which browsers refuse to send unless the
   // server echoes back the exact request origin (not '*') with
@@ -104,7 +105,7 @@ async function main() {
     }
   }, 1000);
 
-  function startPythonEngine(cameraSource) {
+  function startPythonEngine(cameraSource, mouseSpeed) {
     if (pythonProcess) return;
 
     // Determine python executable (.venv if present, otherwise global python)
@@ -112,8 +113,14 @@ async function main() {
     const scriptPath = fs.existsSync(ultimateScriptPath) ? ultimateScriptPath : fallbackBridgePath;
 
     currentCameraSource = (cameraSource || '').trim();
+    // 0.5x-3x, matching MOUSE_SPEED_MIN/MAX in ultimate_gesture_control.py
+    // (which re-clamps this independently — the source of truth for the
+    // valid range lives there, not here).
+    const parsedSpeed = Number(mouseSpeed);
+    const startupMouseSpeed = Number.isFinite(parsedSpeed) ? parsedSpeed : 1.0;
     console.log(`[Express Backend] Spawning Python Engine Command: ${pythonCmd} ${scriptPath}` +
-      (currentCameraSource ? ` (camera: ${currentCameraSource})` : ' (camera: local webcam)'));
+      (currentCameraSource ? ` (camera: ${currentCameraSource})` : ' (camera: local webcam)') +
+      ` (mouse speed: ${startupMouseSpeed}x)`);
     engineRunning = true;
 
     try {
@@ -128,7 +135,11 @@ async function main() {
           // frame) or IP-camera URL / device index, instead of the PC webcam.
           AI_GOS_CAMERA_SOURCE: currentCameraSource,
           // So the 'phone' source knows where to poll for frames.
-          AI_GOS_BACKEND_PORT: String(PORT)
+          AI_GOS_BACKEND_PORT: String(PORT),
+          // Initial cursor-speed multiplier — the "Mouse Speed" slider in
+          // the web HUD's Phone & Settings tab. Adjustable live afterward
+          // via the SET_MOUSE_SPEED: engine command (see /api/engine/command).
+          AI_GOS_MOUSE_SPEED: String(startupMouseSpeed)
         }
       });
 
@@ -223,7 +234,7 @@ async function main() {
       stopPythonEngine();
       res.json({ success: true, engineActive: false, message: 'Python AI Engine HALTED' });
     } else {
-      startPythonEngine(req.body && req.body.cameraSource);
+      startPythonEngine(req.body && req.body.cameraSource, req.body && req.body.mouseSpeed);
       res.json({ success: true, engineActive: true, message: 'Python AI Engine STARTED' });
     }
   });
@@ -250,6 +261,31 @@ async function main() {
 
   // --- Phone camera session endpoints ---
 
+  // Whether this server's HTTPS cert is a trusted mkcert-issued one (in
+  // which case installing the CA below removes the phone's warning
+  // entirely) or an untrusted selfsigned fallback (in which case there's no
+  // CA worth installing — "Advanced -> Proceed" on the leaf cert is the
+  // only option). Unauthenticated like /phone-cam/:sessionId itself: the
+  // phone reaches this before it has any session of its own, and none of
+  // this is sensitive — it's metadata about a public certificate.
+  app.get('/api/cert-info', (req, res) => {
+    res.json({ trusted: !!certTrusted, caDownloadAvailable: !!rootCaPath });
+  });
+
+  // Serves mkcert's public root CA certificate so a phone can install it as
+  // a trusted authority — the private key backing it never leaves this
+  // machine's mkcert install, so handing out this file grants no more than
+  // "trust HTTPS certs this dev machine issues for itself", the same trust
+  // this PC's own browser already extends via `mkcert -install`.
+  app.get('/root-ca.pem', (req, res) => {
+    if (!rootCaPath) {
+      return res.status(404).send('No trusted CA available on this server (it is using a self-signed certificate).');
+    }
+    res.setHeader('Content-Type', 'application/x-x509-ca-cert');
+    res.setHeader('Content-Disposition', 'attachment; filename="ai-gos-ca.pem"');
+    res.sendFile(rootCaPath);
+  });
+
   // Start a new phone-pairing session: generates a fresh session id, a QR
   // code, and invalidates any previously active phone session.
   app.get('/api/phone-session/new', requireAuth, async (req, res) => {
@@ -260,7 +296,7 @@ async function main() {
     const url = `https://${getLanIp()}:${PORT}/phone-cam/${activePhoneSessionId}`;
     try {
       const qrDataUrl = await QRCode.toDataURL(url, { margin: 1, width: 320 });
-      res.json({ sessionId: activePhoneSessionId, url, qr: qrDataUrl });
+      res.json({ sessionId: activePhoneSessionId, url, qr: qrDataUrl, certTrusted: !!certTrusted, caDownloadAvailable: !!rootCaPath });
     } catch (err) {
       res.status(500).json({ success: false, message: 'Failed to generate QR code' });
     }
@@ -268,6 +304,26 @@ async function main() {
 
   app.get('/api/phone-session/status', requireAuth, (req, res) => {
     res.json({ connected: phoneConnected, sessionId: activePhoneSessionId });
+  });
+
+  // Polled by the phone's own capture page to draw the hand-tracking points
+  // it sent frames for back onto its own preview — the engine (MediaPipe)
+  // only runs on the PC, so the phone has no landmarks of its own. No
+  // requireAuth, matching /phone-cam/:sessionId's own unauthenticated
+  // design (the phone never logs in); gated on the engine actually
+  // consuming the phone as its camera source instead, so a phone doesn't
+  // render stale or unrelated points from a PC-webcam session. Landmark
+  // coordinates aren't sensitive, so a plain poll (like /api/phone-frame/
+  // latest already does) is simpler here than standing up a second,
+  // separately-authenticated Socket.io namespace just for this.
+  app.get('/api/phone-session/landmarks', (req, res) => {
+    const isPhoneSource = engineRunning && currentCameraSource === 'phone';
+    res.json({
+      active: isPhoneSource,
+      landmarks: isPhoneSource ? (latestTelemetry.landmarks || []) : [],
+      gesture: isPhoneSource ? (latestTelemetry.gesture || 'IDLE') : null,
+      confidence: isPhoneSource ? (latestTelemetry.confidence || 0) : 0,
+    });
   });
 
   // Explicit user-initiated disconnect (as opposed to the staleness timeout
@@ -365,7 +421,7 @@ async function main() {
 
     socket.on('toggle-engine', (payload) => {
       if (engineRunning) stopPythonEngine();
-      else startPythonEngine(payload && payload.cameraSource);
+      else startPythonEngine(payload && payload.cameraSource, payload && payload.mouseSpeed);
     });
 
     socket.on('engine-command', (command) => {
@@ -381,7 +437,12 @@ async function main() {
     console.log(`=======================================================`);
     console.log(`🚀 Express AI-GOS Server active on https://localhost:${PORT}`);
     console.log(`   LAN address for phone pairing: https://${getLanIp()}:${PORT}`);
-    console.log(`   (run "npm run setup:https" once if your browser shows a certificate warning)`);
+    if (certTrusted) {
+      console.log(`   ✅ Trusted local certificate (mkcert) — no warning on this PC.`);
+      console.log(`      Phones can install the same CA from the "Secure connection" panel on the pairing page.`);
+    } else {
+      console.log(`   ⚠️  Using a self-signed certificate — run "npm run setup:https" for a trusted one (needs mkcert).`);
+    }
     console.log(`=======================================================`);
   });
 }
