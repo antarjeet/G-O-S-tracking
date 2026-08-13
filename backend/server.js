@@ -38,7 +38,17 @@ async function main() {
 
   const app = express();
   const { cert, key, trusted: certTrusted } = await getOrCreateCertificate();
-  const server = https.createServer({ cert, key }, app);
+  // Not passed as the requestListener here — Socket.io's own 'request'
+  // listener below must be attached to `server` BEFORE Express's is, so it
+  // always gets first look at every request. Otherwise both listeners fire
+  // for every request (Node calls all 'request' listeners, in registration
+  // order) and it becomes a race: Express's static-file fallback is
+  // fs.stat-based (a tick of I/O) vs Socket.io's synchronous path check, so
+  // locally Socket.io's response reliably lands first — but proxied through
+  // something like a Cloudflare Tunnel, the added latency was enough to flip
+  // that race, and Express's 404 won instead, breaking every /socket.io/*
+  // request with no error on the tunnel's side to point to.
+  const server = https.createServer({ cert, key });
   const rootCaPath = certTrusted ? getRootCaPath() : null;
   // Session cookies need credentials on cross-origin requests (frontend on
   // Vite's port, backend on 5000), which browsers refuse to send unless the
@@ -54,6 +64,9 @@ async function main() {
     // CPU trying to deflate it every frame only adds latency for no benefit.
     perMessageDeflate: false
   });
+  // Registered after `io`, so Socket.io's listener (attached above) always
+  // runs first and only Express sees requests it didn't claim.
+  server.on('request', app);
 
   app.use(cors(corsOptions));
   app.use(express.json());

@@ -483,7 +483,13 @@
     // dance needed the way the old ai-gos-hud (Vite dev server on a
     // different port) required.
     const AUTH_OPTS = { credentials: 'include' };
-    const socket = io({ autoConnect: false, reconnection: true, withCredentials: true });
+    // Forced to websocket-only: Engine.io's long-polling handshake parses
+    // req.url per-request, and proxying it through an extra hop (e.g. a
+    // Cloudflare Tunnel) can alter how that arrives at the origin in ways
+    // polling doesn't handle — it worked reliably direct-to-localhost but
+    // 404'd on every polling request once tunneled. A raw WebSocket upgrade
+    // is a single request on a different code path and sidesteps this.
+    const socket = io({ autoConnect: false, reconnection: true, withCredentials: true, transports: ['websocket'] });
 
     // Browser-side speech recognition (Chrome/Edge). Calling .start() on
     // this is what makes the browser show its native "use your microphone"
