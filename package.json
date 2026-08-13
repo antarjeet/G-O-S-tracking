@@ -1,0 +1,12 @@
+{
+  "name": "gos-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static AI-GOS frontend + Vercel serverless auth/admin API (the gesture engine, telemetry, and phone pairing still run only via backend/server.js on your local PC)",
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "express": "^4.22.2",
+    "mongodb": "^7.5.0"
+  }
+}
